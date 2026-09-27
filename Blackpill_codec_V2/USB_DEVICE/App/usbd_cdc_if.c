@@ -23,6 +23,8 @@
 
 /* USER CODE BEGIN INCLUDE */
 #include "waveforms.h"
+#include <string.h>   // strcmp, strncmp
+#include <stdlib.h>   // atoi, atof
 /* USER CODE END INCLUDE */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -283,10 +285,10 @@ static int8_t CDC_Receive_FS(uint8_t* Buf, uint32_t *Len)
 
     if (c == '\n')
     {
-      // Comando completo recibido
+      // comando completo (llego el fin de linea)
       usb_rx_buffer[usb_rx_index] = '\0';
 
-      // Por ahora simplemente lo devolvemos a la PC
+      // eco del comando a la PC
       CDC_Transmit_FS(usb_rx_buffer, usb_rx_index);
 
       parse_command((char *) usb_rx_buffer);

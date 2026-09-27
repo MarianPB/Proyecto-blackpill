@@ -1,7 +1,7 @@
 #ifndef SSD1306_CONF_H
 #define SSD1306_CONF_H
 
-#define STM32F4                                // <-- AGREGAR: define la familia
+#define STM32F4                                // familia del micro (la usa el driver del OLED)
 
 #define SSD1306_USE_I2C
 #define SSD1306_I2C_PORT        hi2c1

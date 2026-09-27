@@ -1,10 +1,11 @@
 #include "oled.h"
+#include "keypad.h"          // KP_MODE_FREQ / _AMP / _CANAL
 #include "ssd1306.h"
 #include "ssd1306_fonts.h"
-#include "sine_table.h"     // reusamos la tabla para dibujar el seno/chirp
+#include "sine_table.h"     // tabla senoidal para dibujar los iconos de seno y chirp
 #include <stdio.h>          // sprintf
 
-// --- caja donde va el iconito de la onda (arriba a la derecha) ---
+// caja del icono de la onda (arriba a la derecha)
 #define ICON_X    80
 #define ICON_Y    0
 #define ICON_W    46
@@ -93,38 +94,39 @@ void oled_init(void)
     ssd1306_UpdateScreen();
 }
 
-void oled_show(uint8_t canal, waveform_t w, uint32_t freq_hz, uint8_t amp_pct)
+void oled_show(uint8_t canal, waveform_t w, uint32_t freq_hz, uint8_t amp_pct,
+               uint8_t mode, const char *input)
 {
-    char buf[20];
+    char buf[24];
+    const uint8_t escribiendo = (input && input[0]);   // hay digitos tecleados?
     ssd1306_Fill(Black);                    // borro todo
 
-    ssd1306_SetCursor(0, 0);                // linea 1: canal
-    sprintf(buf, "Canal %u", canal);
+    // linea 1: canal (con '>' si estoy en modo canal)
+    ssd1306_SetCursor(0, 0);
+    sprintf(buf, "%cCanal: %s", (mode == KP_MODE_CANAL) ? '>' : ' ',
+                 (canal == 0) ? "IZQ" : "DER");
     ssd1306_WriteString(buf, Font_7x10, White);
 
-    ssd1306_SetCursor(0, 14);               // linea 2: nombre de la onda
+    // linea 2: nombre de la onda + iconito arriba a la derecha
+    ssd1306_SetCursor(0, 14);
     ssd1306_WriteString((char*)wave_name(w), Font_7x10, White);
+    draw_icon(w);
 
-    draw_icon(w);                           // iconito arriba a la derecha
-
-    ssd1306_SetCursor(0, 34);               // linea 3: frecuencia
-    sprintf(buf, "F: %lu Hz", (unsigned long)freq_hz);
+    // linea 3: frecuencia. Si la estoy editando y tecleando, muestro lo tecleado con cursor
+    ssd1306_SetCursor(0, 34);
+    if (mode == KP_MODE_FREQ && escribiendo)
+        sprintf(buf, ">F: %s_", input);
+    else
+        sprintf(buf, "%cF: %lu Hz", (mode == KP_MODE_FREQ) ? '>' : ' ', (unsigned long)freq_hz);
     ssd1306_WriteString(buf, Font_7x10, White);
 
+    // linea 4: amplitud (mismo criterio)
+    ssd1306_SetCursor(0, 48);
+    if (mode == KP_MODE_AMP && escribiendo)
+        sprintf(buf, ">A: %s_", input);
+    else
+        sprintf(buf, "%cA: %u %%", (mode == KP_MODE_AMP) ? '>' : ' ', amp_pct);
     ssd1306_WriteString(buf, Font_7x10, White);
 
-    ssd1306_SetCursor(0, 14);               // linea 2: nombre de la onda
-    ssd1306_WriteString((char*)wave_name(w), Font_7x10, White);
-
-    draw_icon(w);                           // iconito arriba a la derecha
-
-    ssd1306_SetCursor(0, 34);               // linea 3: frecuencia
-    sprintf(buf, "F: %lu Hz", (unsigned long)freq_hz);
-    ssd1306_WriteString(buf, Font_7x10, White);
-
-    ssd1306_SetCursor(0, 48);               // linea 4: amplitud
-    sprintf(buf, "A: %u %%", amp_pct);
-    ssd1306_WriteString(buf, Font_7x10, White);
-
-    ssd1306_UpdateScreen();                 // <-- vuelca todo al OLED
+    ssd1306_UpdateScreen();                 // vuelca el framebuffer al OLED
 }

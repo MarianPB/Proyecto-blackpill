@@ -30,11 +30,11 @@ extern uint32_t amplitud[2];                   // usbd_cdc_if.c (uno por canal)
 // --- estado del ingreso de numeros ---
 static char    numbuf[8];
 static uint8_t nlen = 0;
-static uint8_t edit_amp = 0;    // 0 = editando frecuencia, 1 = editando amplitud
+static uint8_t mode = KP_MODE_FREQ;   // modo de edicion activo: frecuencia / amplitud / canal
 
 void keypad_init(void)
 {
-    for (int r = 0; r < 4; r++)                // arranco con todas las filas en alto
+    for (int r = 0; r < 4; r++)                // deja todas las filas en alto
         HAL_GPIO_WritePin(rows[r].port, rows[r].pin, GPIO_PIN_SET);
 }
 
@@ -45,15 +45,15 @@ static char keypad_scan(void)
     char found = 0;
 
     for (int r = 0; r < 4 && !found; r++) {
-        HAL_GPIO_WritePin(rows[r].port, rows[r].pin, GPIO_PIN_RESET);   // activo (bajo) esta fila
-        for (volatile int d = 0; d < 200; d++);                        // dejo asentar
+        HAL_GPIO_WritePin(rows[r].port, rows[r].pin, GPIO_PIN_RESET);   // pone esta fila en bajo
+        for (volatile int d = 0; d < 200; d++);                        // espera a que se asiente el nivel
         for (int c = 0; c < 4; c++) {
             if (HAL_GPIO_ReadPin(cols[c].port, cols[c].pin) == GPIO_PIN_RESET) {
-                found = keymap[r][c];                                   // columna en 0 -> tecla apretada
+                found = keymap[r][c];                                   // columna en bajo -> tecla apretada
                 break;
             }
         }
-        HAL_GPIO_WritePin(rows[r].port, rows[r].pin, GPIO_PIN_SET);     // la devuelvo a alto
+        HAL_GPIO_WritePin(rows[r].port, rows[r].pin, GPIO_PIN_SET);     // vuelve la fila a alto
     }
 
     char result = (found && found != last) ? found : 0;   // flanco: 1 sola vez por apretada
@@ -67,19 +67,40 @@ void keypad_process(void)
     char k = keypad_scan();
     if (!k) return;
 
-    if (k >= '0' && k <= '9') {                        // digito -> lo acumulo
-        if (nlen < sizeof(numbuf) - 1) numbuf[nlen++] = k;
+    if (k >= '0' && k <= '9') {                        // digito
+        if (mode == KP_MODE_CANAL) {                   // en modo canal: 0 = izq, 1 = der
+            if (k == '0') canal_seleccionado = 0;
+            else if (k == '1') canal_seleccionado = 1;
+        } else if (nlen < sizeof(numbuf) - 1) {        // freq/amp: acumula el digito
+            numbuf[nlen++] = k;
+        }
     }
     else if (k == 'A') waveform[canal_seleccionado] = WAVE_SINE;
     else if (k == 'B') waveform[canal_seleccionado] = WAVE_SQUARE;
     else if (k == 'C') waveform[canal_seleccionado] = WAVE_TRIANGLE;
     else if (k == 'D') waveform[canal_seleccionado] = WAVE_CHIRP;
-    else if (k == '*') { edit_amp ^= 1; nlen = 0; }    // cambia freq <-> amp
-    else if (k == '#') {                               // ENTER: aplica el numero
-        numbuf[nlen] = '\0';
-        uint32_t val = atoi(numbuf);
-        if (edit_amp) amplitud[canal_seleccionado] = val;
-        else          frecuencia[canal_seleccionado] = (float)val;
+    else if (k == '*') {                               // cicla: frec -> amp -> canal
+        mode = (mode + 1) % 3;
         nlen = 0;
     }
+    else if (k == '#') {                               // ENTER / accion segun el modo
+        if (mode == KP_MODE_CANAL) {
+            canal_seleccionado ^= 1;                   // togglea izq <-> der
+        } else {
+            numbuf[nlen] = '\0';
+            uint32_t val = atoi(numbuf);
+            if (mode == KP_MODE_AMP) amplitud[canal_seleccionado] = val;
+            else                     frecuencia[canal_seleccionado] = (float)val;
+        }
+        nlen = 0;
+    }
+}
+
+// estado para mostrar en el OLED
+uint8_t keypad_get_mode(void) { return mode; }
+
+const char* keypad_get_input(void)
+{
+    numbuf[nlen] = '\0';   // cierra la cadena antes de devolverla
+    return numbuf;
 }

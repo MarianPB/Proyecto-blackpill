@@ -1,28 +1,29 @@
 #include "waveforms.h"
 #include "sine_table.h"
 
-// estas viven en main.c: las "tomamos prestadas"
-extern uint32_t acc[2];            // fase de cada canal
-extern volatile uint32_t ftw[2];   // FTW (frecuencia) de cada canal
+// acumulador de fase y FTW de cada canal (definidos en main.c)
+extern uint32_t acc[2];
+extern volatile uint32_t ftw[2];
 
-#define FS  48828.125              // OJO: igual que el FS del main.c
+#define FS  97656.25               // frecuencia de muestreo (debe coincidir con la de main.c)
 
-volatile waveform_t waveform[2] = { WAVE_SINE, WAVE_SINE };  // arranca en seno
+volatile waveform_t waveform[2] = { WAVE_SINE, WAVE_SINE };  // forma de onda de cada canal
 
-// --- estado propio del chirp, uno por canal ---
-static uint32_t chirp_ftw[2];      // FTW instantanea (la que va subiendo)
-static uint32_t chirp_start[2];    // FTW inicial (f0)
-static uint32_t chirp_end[2];      // FTW final   (f1)
-static uint32_t chirp_step[2];     // cuanto sube la FTW por muestra
+// estado del chirp, uno por canal
+static uint32_t chirp_ftw[2];      // FTW instantanea del barrido
+static uint32_t chirp_start[2];    // FTW correspondiente a f0
+static uint32_t chirp_end[2];      // FTW correspondiente a f1
+static uint32_t chirp_step[2];     // incremento de FTW por muestra
 
+// Configura un barrido de f0 a f1 en dur_s segundos para el canal c
 void chirp_config(uint8_t c, float f0, float f1, float dur_s)
 {
-    chirp_start[c] = (uint32_t)(f0 * 4294967296.0 / FS);   // FTW de f0
-    chirp_end[c]   = (uint32_t)(f1 * 4294967296.0 / FS);   // FTW de f1
+    chirp_start[c] = (uint32_t)(f0 * 4294967296.0 / FS);
+    chirp_end[c]   = (uint32_t)(f1 * 4294967296.0 / FS);
     uint32_t nsamp = (uint32_t)(dur_s * FS);               // muestras que dura el barrido
     if (nsamp == 0) nsamp = 1;
     chirp_step[c]  = (chirp_end[c] - chirp_start[c]) / nsamp;
-    chirp_ftw[c]   = chirp_start[c];                        // empieza en f0
+    chirp_ftw[c]   = chirp_start[c];
 }
 
 int32_t wave_next(uint8_t c)
@@ -31,31 +32,31 @@ int32_t wave_next(uint8_t c)
 
     switch (waveform[c])
     {
-    case WAVE_SINE:                              // ---- SENO ----
-        acc[c] += ftw[c];                        // avanzo la fase con la FTW, y busco el valor en la tabla.
-        v = sine_table[acc[c] >> 19];
+    case WAVE_SINE:                              // seno: valor directo de la tabla
+        acc[c] += ftw[c];                        // avanza la fase
+        v = sine_table[acc[c] >> 19];            // los 13 bits altos indexan la tabla de 8192
         break;
 
-    case WAVE_SQUARE:                                       // ---- CUADRADA
-        acc[c] += ftw[c];                                   // avanzo la fase, y pregunto en qué mitad estoy. 0x80000000 es 
-        v = (acc[c] < 0x80000000u) ? 8388607 : -8388608;    // 2^31 = la mitad del acumulador. Primera mitad → máximo (+); 
-        break;                                              // segunda mitad → mínimo (−).
-
-    case WAVE_TRIANGLE:                                             // ---- TRIANGULAR ----
-        acc[c] += ftw[c];                                           // avanzo la fase y la uso como rampa, Primera mitad (acc < 2^31): subo de −máx hacia +máx.
-        if (acc[c] < 0x80000000u)                                   // Segunda mitad: bajo de +máx hacia −máx.
-            v = -8388608 + (int32_t)(acc[c] >> 7);                  // El >> 7: la media fase tiene 2^31 valores, pero la amplitud que quiero tiene 2^24 (±2^23).
-        else                                                        // Como 2^31 / 2^7 = 2^24, corro 7 bits para "encoger" la rampa al rango de amplitud.
-            v = 8388608 - (int32_t)((acc[c] - 0x80000000u) >> 7);   // El clamp evita que en el pico justo se pase 1 unidad
-        if (v > 8388607) v = 8388607;
+    case WAVE_SQUARE:                                       // cuadrada: signo segun la mitad del acumulador
+        acc[c] += ftw[c];
+        v = (acc[c] < 0x80000000u) ? 8388607 : -8388608;    // 1a mitad -> maximo (+), 2a mitad -> minimo (-)
         break;
 
-     case WAVE_CHIRP:                             // ---- CHIRP ----
-        chirp_ftw[c] += chirp_step[c];           // la frecuencia sube un poquito
+    case WAVE_TRIANGLE:                                             // triangular: rampa que sube y baja
+        acc[c] += ftw[c];
+        if (acc[c] < 0x80000000u)                                   // 1a mitad: sube de -max a +max
+            v = -8388608 + (int32_t)(acc[c] >> 7);                  // >>7 lleva los 2^31 valores de la media fase al rango +-2^23
+        else                                                        // 2a mitad: baja de +max a -max
+            v = 8388608 - (int32_t)((acc[c] - 0x80000000u) >> 7);
+        if (v > 8388607) v = 8388607;                               // recorte por si el pico se pasa 1 unidad
+        break;
+
+     case WAVE_CHIRP:                             // chirp: seno con la FTW subiendo hasta f1 y volviendo a f0
+        chirp_ftw[c] += chirp_step[c];
         if (chirp_ftw[c] >= chirp_end[c])
-            chirp_ftw[c] = chirp_start[c];       // llego a f1 -> vuelve a f0
-        acc[c] += chirp_ftw[c];                  // avanzo con la FTW del momento
-        v = sine_table[acc[c] >> 19];            // es un seno que barre
+            chirp_ftw[c] = chirp_start[c];
+        acc[c] += chirp_ftw[c];
+        v = sine_table[acc[c] >> 19];
         break;
 
      default:

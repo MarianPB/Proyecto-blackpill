@@ -49,14 +49,14 @@ typedef enum {
 
 /* Private define ------------------------------------------------------------*/
 /* USER CODE BEGIN PD */
-#define FS           48828.125         // fs REAL de la V2 (I2SCLK 100MHz / 2048)
+#define FS           97656.25          // frecuencia de muestreo real (I2SCLK 100MHz / 1024)
 
-#define FRAMES_HALF  256               // frames estéreo por media vuelta del DMA
-#define FRAMES_TOTAL (2 * FRAMES_HALF) // frames en TODO el buffer (512)
-#define BUF_HW       (FRAMES_TOTAL * 4)// halfwords totales: 2 canales x 2 hw c/u (2048)
-#define I2S_SIZE     (FRAMES_TOTAL * 2)// "muestras de 32 bits" que le pasamos a la HAL (1024)
+#define FRAMES_HALF  256               // frames estereo por media vuelta del DMA
+#define FRAMES_TOTAL (2 * FRAMES_HALF) // frames en todo el buffer (512)
+#define BUF_HW       (FRAMES_TOTAL * 4)// halfwords totales: 2 canales x 2 halfwords c/u (2048)
+#define I2S_SIZE     (FRAMES_TOTAL * 2)// tamaño que espera la HAL del I2S (1024)
 
-#define PCM_ADDR     (0x46 << 1)       // dirección I2C del codec: 7 bits corridos a 8
+#define PCM_ADDR     (0x46 << 1)       // direccion I2C del codec (7 bits corridos a 8)
 /* USER CODE END PD */
 
 /* Private macro -------------------------------------------------------------*/
@@ -72,12 +72,12 @@ DMA_HandleTypeDef hdma_spi2_tx;
 
 /* USER CODE BEGIN PV */
 uint32_t          acc[2] = {0, 0};              // acumuladores de fase (uno por canal)
-volatile uint32_t ftw[2] = {0, 0};              // FTW de cada canal (lo cambia el parser)
-volatile uint8_t  canal_seleccionado = LEFT;                    // canal "activo" (el que edita el teclado)
-uint16_t          audio_buf[BUF_HW];            // el buffer circular del DMA
-volatile uint8_t  modo_diferencial = 1;         // 1 = salida diferencial, 0 = simple (single-ended)
+volatile uint32_t ftw[2] = {0, 0};              // FTW de cada canal
+volatile uint8_t  canal_seleccionado = LEFT;    // canal que edita el teclado
+uint16_t          audio_buf[BUF_HW];            // buffer circular del DMA
+volatile uint8_t  modo_diferencial = 1;         // 1 = salida diferencial, 0 = single-ended
 
-// Parametros que llegan desde el USB o el teclado (uno por canal)
+// parametros de cada canal (los escribe el USB o el teclado)
 extern float frecuencia[2];
 extern uint32_t amplitud[2];
 extern volatile uint8_t salida_activa[2];
@@ -134,30 +134,30 @@ int main(void)
   MX_I2S2_Init();
   MX_USB_DEVICE_Init();
   /* USER CODE BEGIN 2 */
-  // Frecuencia inicial de cada canal
+  // FTW inicial de cada canal
   ftw[0] = (uint32_t)(frecuencia[0] * 4294967296.0 / FS);
   ftw[1] = (uint32_t)(frecuencia[1] * 4294967296.0 / FS);
 
-  // Precargo las DOS mitades ANTES de largar el DMA
+  // cargo las dos mitades del buffer antes de largar el DMA
   fill(&audio_buf[0]);
   fill(&audio_buf[BUF_HW / 2]);
 
-  // Largo el I²S por DMA en modo circular (arranca y no para nunca)
+  // I2S por DMA en modo circular
   HAL_I2S_Transmit_DMA(&hi2s2, audio_buf, I2S_SIZE);
 
-  // Le doy tiempo al codec a estabilizar sus relojes internos
+  // margen para que el codec estabilice sus relojes internos
   HAL_Delay(50);
 
-  // Despierto el codec y subo volúmenes
-  pcm_write(64, 0xE0);   // reg 64: saca el DAC de power-save (ON, salida DIFERENCIAL)
+  // configuracion del codec por I2C
+  pcm_write(64, 0xE0);   // reg 64: DAC encendido, salida diferencial
   pcm_write(65, 0xFF);   // reg 65: volumen DAC L = 0 dB
   pcm_write(66, 0xFF);   // reg 66: volumen DAC R = 0 dB
+  pcm_write(68, 0x40);   // reg 68: sobremuestreo doble (64x a 96 kHz)
 
-  // --- OLED + chirp por defecto ---
   oled_init();
-  chirp_config(0, 200.0f, 2000.0f, 1.0f);   // chirp por defecto: 200 Hz -> 2 kHz en 1 s
+  chirp_config(0, 200.0f, 2000.0f, 1.0f);   // barrido inicial: 200 Hz -> 2 kHz en 1 s
   chirp_config(1, 200.0f, 2000.0f, 1.0f);
-  keypad_init();                            // dejo las filas del teclado en alto
+  keypad_init();
   /* USER CODE END 2 */
 
   /* Infinite loop */
@@ -168,32 +168,40 @@ int main(void)
 
     /* USER CODE BEGIN 3 */
 
-   // --- Actualizacion de frecuencia y amplitud (vienen del USB o del teclado) ---
+   // recalculo el FTW de cada canal a partir de su frecuencia
    ftw[0] = (uint32_t)(frecuencia[0] * 4294967296.0 / FS);
    ftw[1] = (uint32_t)(frecuencia[1] * 4294967296.0 / FS);
-   PCM3060_SetAmplitude(0, amplitud[0]);   // volumen del canal L (registro del codec)
-   PCM3060_SetAmplitude(1, amplitud[1]);   // volumen del canal R (registro del codec)
 
-   // --- modo de salida (diferencial / simple): se aplica solo cuando cambia ---
+   // amplitud: se escribe al codec por I2C solo cuando cambia, para no saturar el bus
+   static uint32_t last_amp[2] = { 0xFFFFFFFF, 0xFFFFFFFF };
+   for (int c = 0; c < 2; c++) {
+       if (amplitud[c] != last_amp[c]) {
+           last_amp[c] = amplitud[c];
+           PCM3060_SetAmplitude(c, amplitud[c]);   // volumen de ese canal (registro del codec)
+       }
+   }
+
+   // modo de salida (diferencial / single-ended): se aplica solo cuando cambia
    static uint8_t last_modo = 0xFF;
    if (modo_diferencial != last_modo) {
        last_modo = modo_diferencial;
        pcm_write(64, modo_diferencial ? 0xE0 : 0xE1);
    }
 
-   // --- teclado: escaneo cada 20 ms ---
+   // teclado: escaneo cada 20 ms
    static uint32_t last_key = 0;
    if (HAL_GetTick() - last_key >= 20) {
        last_key = HAL_GetTick();
        keypad_process();
    }
 
-   // --- refresco del OLED cada 200 ms ---
+   // refresco del OLED cada 200 ms
    static uint32_t last_oled = 0;
    if (HAL_GetTick() - last_oled >= 200) {
        last_oled = HAL_GetTick();
        oled_show(canal_seleccionado, waveform[canal_seleccionado],
-                 (uint32_t)frecuencia[canal_seleccionado], (uint8_t)amplitud[canal_seleccionado]);
+                 (uint32_t)frecuencia[canal_seleccionado], (uint8_t)amplitud[canal_seleccionado],
+                 keypad_get_mode(), keypad_get_input());
    }
   }
   /* USER CODE END 3 */
@@ -298,7 +306,7 @@ static void MX_I2S2_Init(void)
   hi2s2.Init.Standard = I2S_STANDARD_PHILIPS;
   hi2s2.Init.DataFormat = I2S_DATAFORMAT_24B;
   hi2s2.Init.MCLKOutput = I2S_MCLKOUTPUT_ENABLE;
-  hi2s2.Init.AudioFreq = I2S_AUDIOFREQ_48K;
+  hi2s2.Init.AudioFreq = I2S_AUDIOFREQ_96K;
   hi2s2.Init.CPOL = I2S_CPOL_LOW;
   hi2s2.Init.ClockSource = I2S_CLOCK_PLL;
   hi2s2.Init.FullDuplexMode = I2S_FULLDUPLEXMODE_DISABLE;
@@ -377,7 +385,7 @@ static void MX_GPIO_Init(void)
 }
 
 /* USER CODE BEGIN 4 */
-// Llena UNA mitad del buffer: FRAMES_HALF frames (muestras estéreo)
+// Llena una mitad del buffer: FRAMES_HALF frames estereo
 static void fill(uint16_t *dst)
 {
     for (int i = 0; i < FRAMES_HALF; i++)
@@ -386,40 +394,40 @@ static void fill(uint16_t *dst)
 
         for (int c = 0; c < 2; c++)
         {
-            int32_t v = wave_next(c);                  // avanza la fase y da la muestra segun la forma de onda
-            if (!salida_activa[c]) v = 0;              // si el canal esta apagado -> silencio
-            s[c] = v;                                  // si el canal está mudo → 0
+            int32_t v = wave_next(c);                  // muestra segun la forma de onda del canal
+            if (!salida_activa[c]) v = 0;              // canal apagado -> silencio
+            s[c] = v;
         }
 
-        // canal L: parto la muestra de 24 bits en 2 halfwords (MSB primero)
-        *dst++ = (uint16_t)(s[0] >> 8);   // los 16 bits de arriba
-        *dst++ = (uint16_t)(s[0] << 8);   // los 8 de abajo (+ relleno)
-        // canal R
-        *dst++ = (uint16_t)(s[1] >> 8);
-        *dst++ = (uint16_t)(s[1] << 8);
+        // cada muestra de 24 bits se parte en 2 halfwords, MSB primero
+        *dst++ = (uint16_t)(s[0] >> 8);   // L: bits altos
+        *dst++ = (uint16_t)(s[0] << 8);   // L: bits bajos
+        *dst++ = (uint16_t)(s[1] >> 8);   // R: bits altos
+        *dst++ = (uint16_t)(s[1] << 8);   // R: bits bajos
     }
 }
 
-// El DMA terminó la 1ª mitad → la relleno
+// el DMA vacio la 1a mitad: la vuelvo a llenar
 void HAL_I2S_TxHalfCpltCallback(I2S_HandleTypeDef *hi2s)
 {
     fill(&audio_buf[0]);
 }
 
-// El DMA terminó la 2ª mitad → la relleno
+// el DMA vacio la 2a mitad: la vuelvo a llenar
 void HAL_I2S_TxCpltCallback(I2S_HandleTypeDef *hi2s)
 {
     fill(&audio_buf[BUF_HW / 2]);
 }
 
-// Escribe un byte en un registro del codec por I²C
+// escribe un byte en un registro del codec por I2C
 static void pcm_write(uint8_t reg, uint8_t val)
 {
     uint8_t buf[2] = { reg, val };
     HAL_I2C_Master_Transmit(&hi2c1, PCM_ADDR, buf, 2, HAL_MAX_DELAY);
 }
 
-void PCM3060_SetAmplitude(uint8_t canal, uint32_t amplitud) // Toma la variable amplitud traida por usb, la convierte a db y escr
+// convierte la amplitud en % a la atenuacion del codec y la escribe
+void PCM3060_SetAmplitude(uint8_t canal, uint32_t amplitud)
 {
     uint8_t reg = (canal == 0) ? 0x41 : 0x42;   // 0x41 = DAC L, 0x42 = DAC R
 
@@ -433,14 +441,11 @@ void PCM3060_SetAmplitude(uint8_t canal, uint32_t amplitud) // Toma la variable 
         amplitud = 100;
 
     float A = amplitud / 100.0f;
+    float db = 20.0f * log10f(A);          // % -> dB
+    int pasos = (int)roundf(-db / 0.5f);   // cada paso del registro son 0.5 dB
+    uint8_t valor = 255 - pasos;           // 0xFF = 0 dB, baja de a 0.5 dB
 
-    float db = 20.0f * log10f(A);
-
-    int pasos = (int)roundf(-db / 0.5f);
-
-    uint8_t valor = 255 - pasos;
-
-    pcm_write(reg, valor);   // volumen de ese canal
+    pcm_write(reg, valor);
 }
 /* USER CODE END 4 */
 
