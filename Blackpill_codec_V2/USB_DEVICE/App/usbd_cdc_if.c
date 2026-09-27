@@ -430,6 +430,26 @@ static void parse_command(char *command)
         waveform[RIGHT] = (waveform_t)atoi(&command[6]);
     }
 
+    // Chirp canal izquierdo: "LCHIRP:f0,f1,duracion"
+    else if (strncmp(command, "LCHIRP:", 7) == 0)
+    {
+        char *f0 = strtok(&command[7], ",");
+        char *f1 = strtok(NULL, ",");
+        char *dur = strtok(NULL, ",");
+        if (f0 && f1 && dur)
+            chirp_config(LEFT, atof(f0), atof(f1), atof(dur));
+    }
+
+    // Chirp canal derecho
+    else if (strncmp(command, "RCHIRP:", 7) == 0)
+    {
+        char *f0 = strtok(&command[7], ",");
+        char *f1 = strtok(NULL, ",");
+        char *dur = strtok(NULL, ",");
+        if (f0 && f1 && dur)
+            chirp_config(RIGHT, atof(f0), atof(f1), atof(dur));
+    }
+
     // Salida diferencial
     else if (strcmp(command, "DIFF") == 0)
     {

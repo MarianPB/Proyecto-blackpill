@@ -140,6 +140,21 @@ class Aplicacion:
         self.estado_L = False
         self.estado_R = False
 
+        # Parametros del chirp por canal (barrido de frecuencia)
+
+        self.chirp_f0_L = tk.StringVar(value="200")
+        self.chirp_f1_L = tk.StringVar(value="2000")
+        self.chirp_dur_L = tk.StringVar(value="1.0")
+
+        self.chirp_f0_R = tk.StringVar(value="200")
+        self.chirp_f1_R = tk.StringVar(value="2000")
+        self.chirp_dur_R = tk.StringVar(value="1.0")
+
+        # Forma de onda actual de cada canal (para saber que panel mostrar)
+
+        self.forma_L = "sine"
+        self.forma_R = "sine"
+
         # ----------------------------------------------------
         # INTERFAZ
         # ----------------------------------------------------
@@ -291,32 +306,10 @@ class Aplicacion:
         )
 
         # ----------------------------------------------------
-        # FRECUENCIA L
+        # FRECUENCIA / CHIRP L
         # ----------------------------------------------------
 
-        ttk.Label(
-            frame_L,
-            text="Frecuencia (Hz)"
-        ).pack(
-            pady=(10, 2)
-        )
-
-        self.entry_freq_L = ttk.Entry(
-            frame_L,
-            textvariable=self.frecuencia_L,
-            width=15,
-            justify="center"
-        )
-
-        self.entry_freq_L.pack()
-
-        ttk.Button(
-            frame_L,
-            text="Aplicar frecuencia",
-            command=self.actualizar_frecuencia_L
-        ).pack(
-            pady=5
-        )
+        self.panel_frecuencia(frame_L, "L")
 
         # ----------------------------------------------------
         # AMPLITUD L
@@ -448,32 +441,10 @@ class Aplicacion:
         )
 
         # ----------------------------------------------------
-        # FRECUENCIA R
+        # FRECUENCIA / CHIRP R
         # ----------------------------------------------------
 
-        ttk.Label(
-            frame_R,
-            text="Frecuencia (Hz)"
-        ).pack(
-            pady=(10, 2)
-        )
-
-        self.entry_freq_R = ttk.Entry(
-            frame_R,
-            textvariable=self.frecuencia_R,
-            width=15,
-            justify="center"
-        )
-
-        self.entry_freq_R.pack()
-
-        ttk.Button(
-            frame_R,
-            text="Aplicar frecuencia",
-            command=self.actualizar_frecuencia_R
-        ).pack(
-            pady=5
-        )
+        self.panel_frecuencia(frame_R, "R")
 
         # ----------------------------------------------------
         # AMPLITUD R
@@ -665,10 +636,109 @@ class Aplicacion:
         idx = {"sine": 0, "square": 1, "tri": 2, "chirp": 3}[forma]
         self.stm32.enviar(f"{canal}WAVE:{idx}")
 
+        if canal == "L":
+            self.forma_L = forma
+        else:
+            self.forma_R = forma
+
+        self.actualizar_panel_frecuencia(canal)
+
 
     def aplicar_salida(self):
 
         self.stm32.enviar(self.modo_salida.get())   # manda "DIFF" o "SE"
+
+
+    # ========================================================
+    # PANEL DE FRECUENCIA / CHIRP (cambia por canal)
+    # ========================================================
+
+    def panel_frecuencia(self, parent, canal):
+
+        if canal == "L":
+            freq_var = self.frecuencia_L
+            f0_var, f1_var, dur_var = self.chirp_f0_L, self.chirp_f1_L, self.chirp_dur_L
+            cmd_freq, cmd_chirp = self.actualizar_frecuencia_L, self.aplicar_chirp_L
+        else:
+            freq_var = self.frecuencia_R
+            f0_var, f1_var, dur_var = self.chirp_f0_R, self.chirp_f1_R, self.chirp_dur_R
+            cmd_freq, cmd_chirp = self.actualizar_frecuencia_R, self.aplicar_chirp_R
+
+        cont = ttk.Frame(parent)
+        cont.pack(pady=(10, 0))
+
+        # --- panel de frecuencia fija ---
+        panel_fija = ttk.Frame(cont)
+        ttk.Label(panel_fija, text="Frecuencia (Hz)").pack(pady=(0, 2))
+        ttk.Entry(panel_fija, textvariable=freq_var, width=15, justify="center").pack()
+        ttk.Button(panel_fija, text="Aplicar frecuencia", command=cmd_freq).pack(pady=5)
+
+        # --- panel de chirp (barrido) ---
+        panel_chirp = ttk.Frame(cont)
+        ttk.Label(panel_chirp, text="Chirp (barrido de frecuencia)").pack(pady=(0, 4))
+        for texto, var in (("f inicial (Hz)", f0_var),
+                           ("f final (Hz)", f1_var),
+                           ("duración (s)", dur_var)):
+            fila = ttk.Frame(panel_chirp)
+            fila.pack(pady=2)
+            ttk.Label(fila, text=texto, width=13, anchor="w").pack(side="left")
+            ttk.Entry(fila, textvariable=var, width=8, justify="center").pack(side="left")
+        ttk.Button(panel_chirp, text="Aplicar chirp", command=cmd_chirp).pack(pady=5)
+
+        if canal == "L":
+            self.panel_fija_L, self.panel_chirp_L = panel_fija, panel_chirp
+        else:
+            self.panel_fija_R, self.panel_chirp_R = panel_fija, panel_chirp
+
+        panel_fija.pack()   # por defecto se muestra la frecuencia fija
+
+
+    def actualizar_panel_frecuencia(self, canal):
+
+        if canal == "L":
+            forma, fija, chirp = self.forma_L, self.panel_fija_L, self.panel_chirp_L
+        else:
+            forma, fija, chirp = self.forma_R, self.panel_fija_R, self.panel_chirp_R
+
+        if forma == "chirp":
+            fija.pack_forget()
+            chirp.pack()
+        else:
+            chirp.pack_forget()
+            fija.pack()
+
+
+    def aplicar_chirp_L(self):
+
+        self.enviar_chirp("L", self.chirp_f0_L, self.chirp_f1_L, self.chirp_dur_L)
+
+
+    def aplicar_chirp_R(self):
+
+        self.enviar_chirp("R", self.chirp_f0_R, self.chirp_f1_R, self.chirp_dur_R)
+
+
+    def enviar_chirp(self, canal, f0_var, f1_var, dur_var):
+
+        try:
+
+            f0 = float(f0_var.get())
+            f1 = float(f1_var.get())
+            dur = float(dur_var.get())
+
+            if f0 <= 0 or f1 <= 0 or dur <= 0:
+                raise ValueError
+
+        except ValueError:
+
+            messagebox.showerror(
+                "Chirp",
+                "Ingresá f inicial, f final y duración válidas (mayores a 0)."
+            )
+
+            return
+
+        self.stm32.enviar(f"{canal}CHIRP:{f0},{f1},{dur}")
 
 
     # ========================================================
