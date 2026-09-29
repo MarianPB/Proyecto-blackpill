@@ -155,11 +155,20 @@ class Aplicacion:
         self.forma_L = "sine"
         self.forma_R = "sine"
 
+        # Botones de forma de onda por canal (para resaltar el seleccionado)
+
+        self.botones_onda = {"L": {}, "R": {}}
+
         # ----------------------------------------------------
         # INTERFAZ
         # ----------------------------------------------------
 
         self.crear_interfaz()
+
+        # Marca la forma de onda por defecto (seno) en cada canal
+
+        self.resaltar_onda("L")
+        self.resaltar_onda("R")
 
         self.actualizar_puertos()
 
@@ -588,10 +597,11 @@ class Aplicacion:
 
         c = tk.Canvas(
             parent, width=48, height=30, bg="white",
-            highlightthickness=1, highlightbackground="#999", cursor="hand2"
+            highlightthickness=2, highlightbackground="#BBBBBB", cursor="hand2"
         )
         self.dibujar_onda(c, forma)
         c.bind("<Button-1>", lambda e: self.set_onda(canal, forma))
+        self.botones_onda[canal][forma] = c
         return c
 
 
@@ -641,7 +651,20 @@ class Aplicacion:
         else:
             self.forma_R = forma
 
+        self.resaltar_onda(canal)
+
         self.actualizar_panel_frecuencia(canal)
+
+
+    def resaltar_onda(self, canal):
+
+        forma_sel = self.forma_L if canal == "L" else self.forma_R
+
+        for f, c in self.botones_onda[canal].items():
+            if f == forma_sel:
+                c.config(bg="#CFE6FF", highlightbackground="#0B63C4")
+            else:
+                c.config(bg="white", highlightbackground="#BBBBBB")
 
 
     def aplicar_salida(self):
