@@ -61,6 +61,8 @@ void Error_Handler(void);
 #define RST_CODEC_GPIO_Port GPIOA
 #define LED_I2C_Pin GPIO_PIN_6
 #define LED_I2C_GPIO_Port GPIOA
+#define Square_Pin GPIO_PIN_3
+#define Square_GPIO_Port GPIOB
 
 /* USER CODE BEGIN Private defines */
 

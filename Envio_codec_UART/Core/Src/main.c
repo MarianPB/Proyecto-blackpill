@@ -34,8 +34,7 @@
 /* USER CODE BEGIN PD */
 #define CODEC_I2C_ADDRESS 0x46 << 1
 
-#define BUFF_SIZE 1024 // 512 tramas (512 L + 512 R)
-#define HALF_BUFF_SIZE (BUFF_SIZE/2)
+#define I2S_SAMPLES 1024 // 512 L + 512 R
 
 /* USER CODE END PD */
 
@@ -50,12 +49,16 @@ I2C_HandleTypeDef hi2c1;
 I2S_HandleTypeDef hi2s2;
 DMA_HandleTypeDef hdma_spi2_rx;
 
+TIM_HandleTypeDef htim3;
+
 UART_HandleTypeDef huart1;
 
 /* USER CODE BEGIN PV */
-// Buffer de 32 bits para el I2S
-int32_t buffer_i2s[BUFF_SIZE];
-int32_t buff_dma[HALF_BUFF_SIZE];
+// El DMA pedirá 2048 transferencias de 16 bits internamente.
+uint16_t buffer_i2s_rx[I2S_SAMPLES * 2];
+
+// Buffer de 32 bits procesado para imprimir
+int32_t buff_dma[I2S_SAMPLES / 2];
 
 volatile uint8_t flag_half_complete = 0;
 volatile uint8_t flag_recept = 0;
@@ -70,6 +73,7 @@ static void MX_DMA_Init(void);
 static void MX_I2C1_Init(void);
 static void MX_I2S2_Init(void);
 static void MX_USART1_UART_Init(void);
+static void MX_TIM3_Init(void);
 /* USER CODE BEGIN PFP */
 void PCM3060_Init_Master(I2C_HandleTypeDef *hi2c);
 
@@ -113,28 +117,16 @@ int main(void)
   MX_I2C1_Init();
   MX_I2S2_Init();
   MX_USART1_UART_Init();
+  MX_TIM3_Init();
   /* USER CODE BEGIN 2 */
-  //HAL_GPIO_WritePin(GPIOA, RST_CODEC_Pin, GPIO_PIN_SET);	//Pin RST alto
-  //PCM3060_Init_Master(&hi2c1);
+  HAL_Delay(30);											// Demora mayora a 2048/fs para secuencia de inicio
+  HAL_GPIO_WritePin(GPIOA, RST_CODEC_Pin, GPIO_PIN_SET);	//Pin RST alto
+  HAL_Delay(30);
+  PCM3060_Init_Master(&hi2c1);
 
-  //HAL_I2S_Receive_DMA(&hi2s2, (uint16_t*)buffer_i2s, BUFF_SIZE);
+  HAL_I2S_Receive_DMA(&hi2s2, (uint16_t*)buffer_i2s_rx, I2S_SAMPLES);
   HAL_UART_Receive_IT(&huart1, &caracter, 1);
-
-  int32_t amplitud = 838860; // Amplitud arbitraria para observar la señal
-  uint16_t periodo = 64;     // Cantidad de muestras por ciclo de la onda cuadrada
-
-  for(uint16_t i = 0; i < BUFF_SIZE; i += 2) {
-      // Canal Izquierdo (índices pares)
-      buffer_i2s[i] = 0;
-
-      // Canal Derecho (índices impares)
-      if (((i / 2) % periodo) < (periodo / 2)) {
-          buffer_i2s[i + 1] = amplitud;
-      } else {
-          buffer_i2s[i + 1] = -amplitud;
-      }
-  }
-  flag_half_complete=1;
+  HAL_TIM_Base_Start_IT(&htim3);
 
   char package[30]={};
   uint8_t flag_sending=0;
@@ -153,16 +145,25 @@ int main(void)
 
 	            if(flag_local == 1 || flag_local == 2)
 	            {
-	                //flag_half_complete = 0; // Limpiar flag rápido
+	                flag_half_complete = 0; // Limpiar flag global
 
 	                // Copiar la mitad correspondiente
-	                uint16_t offset = (flag_local == 1) ? 0 : HALF_BUFF_SIZE;
-	                for(uint16_t j = 0; j < HALF_BUFF_SIZE; j++)
-	                {
-	                    buff_dma[j] = buffer_i2s[offset + j];
-	                }
+	                uint16_t offset = (flag_local == 1) ? 0 : I2S_SAMPLES;
+	                for(uint16_t j = 0; j < (I2S_SAMPLES / 2); j++){
 
-	                for(uint16_t j=0; j<HALF_BUFF_SIZE; j+=2){
+	                    // Extraer parte alta y baja (alta llega primero)
+	                    uint16_t hw_msb = buffer_i2s_rx[offset + (j * 2)];
+	                    uint16_t hw_lsb = buffer_i2s_rx[offset + (j * 2) + 1];
+
+	                    // Unio nde parte alta y baja, queda alineado a la derecha
+	                    int32_t sample = (int32_t)((hw_msb << 16) | hw_lsb );
+	                    //buff_dma[j] = (int32_t)((hw_msb << 8) | hw_lsb >> 8);
+
+	                    // Extender el signo
+	                    buff_dma[j] = sample >> 8;
+	                    }
+
+	                for(uint16_t j=0; j<(I2S_SAMPLES / 2); j+=2){
 
 	                	snprintf(package, sizeof(package), "%ld,%ld\r\n",buff_dma[j],buff_dma[j+1]);
 	                	HAL_UART_Transmit(&huart1, (uint8_t*)package, strlen(package), HAL_MAX_DELAY);
@@ -292,6 +293,51 @@ static void MX_I2S2_Init(void)
 }
 
 /**
+  * @brief TIM3 Initialization Function
+  * @param None
+  * @retval None
+  */
+static void MX_TIM3_Init(void)
+{
+
+  /* USER CODE BEGIN TIM3_Init 0 */
+
+  /* USER CODE END TIM3_Init 0 */
+
+  TIM_ClockConfigTypeDef sClockSourceConfig = {0};
+  TIM_MasterConfigTypeDef sMasterConfig = {0};
+
+  /* USER CODE BEGIN TIM3_Init 1 */
+
+  /* USER CODE END TIM3_Init 1 */
+  htim3.Instance = TIM3;
+  htim3.Init.Prescaler = 8-1;
+  htim3.Init.CounterMode = TIM_COUNTERMODE_UP;
+  htim3.Init.Period = 1000-1;
+  htim3.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
+  htim3.Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_DISABLE;
+  if (HAL_TIM_Base_Init(&htim3) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  sClockSourceConfig.ClockSource = TIM_CLOCKSOURCE_INTERNAL;
+  if (HAL_TIM_ConfigClockSource(&htim3, &sClockSourceConfig) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  sMasterConfig.MasterOutputTrigger = TIM_TRGO_RESET;
+  sMasterConfig.MasterSlaveMode = TIM_MASTERSLAVEMODE_DISABLE;
+  if (HAL_TIMEx_MasterConfigSynchronization(&htim3, &sMasterConfig) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  /* USER CODE BEGIN TIM3_Init 2 */
+
+  /* USER CODE END TIM3_Init 2 */
+
+}
+
+/**
   * @brief USART1 Initialization Function
   * @param None
   * @retval None
@@ -362,6 +408,9 @@ static void MX_GPIO_Init(void)
   /*Configure GPIO pin Output Level */
   HAL_GPIO_WritePin(LED_I2C_GPIO_Port, LED_I2C_Pin, GPIO_PIN_RESET);
 
+  /*Configure GPIO pin Output Level */
+  HAL_GPIO_WritePin(Square_GPIO_Port, Square_Pin, GPIO_PIN_RESET);
+
   /*Configure GPIO pins : RST_CODEC_Pin LED_I2C_Pin */
   GPIO_InitStruct.Pin = RST_CODEC_Pin|LED_I2C_Pin;
   GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
@@ -373,9 +422,16 @@ static void MX_GPIO_Init(void)
   GPIO_InitStruct.Pin = GPIO_PIN_8;
   GPIO_InitStruct.Mode = GPIO_MODE_AF_PP;
   GPIO_InitStruct.Pull = GPIO_NOPULL;
-  GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
+  GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_VERY_HIGH;
   GPIO_InitStruct.Alternate = GPIO_AF0_MCO;
   HAL_GPIO_Init(GPIOA, &GPIO_InitStruct);
+
+  /*Configure GPIO pin : Square_Pin */
+  GPIO_InitStruct.Pin = Square_Pin;
+  GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
+  GPIO_InitStruct.Pull = GPIO_NOPULL;
+  GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
+  HAL_GPIO_Init(Square_GPIO_Port, &GPIO_InitStruct);
 
   /* USER CODE BEGIN MX_GPIO_Init_2 */
 
@@ -425,6 +481,10 @@ void PCM3060_Init_Master(I2C_HandleTypeDef *hi2c) {
         // Si entra aquí, el I2C falló. Enciende un LED o pon un breakpoint.
         HAL_GPIO_WritePin(GPIOA, GPIO_PIN_6, GPIO_PIN_SET);
     }
+}
+
+void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim){
+	if(htim->Instance==TIM3)HAL_GPIO_TogglePin(Square_GPIO_Port, Square_Pin);
 }
 
 /* USER CODE END 4 */
