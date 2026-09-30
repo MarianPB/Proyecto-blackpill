@@ -1,0 +1,515 @@
+/* USER CODE BEGIN Header */
+/**
+  ******************************************************************************
+  * @file           : usbd_cdc_if.c
+  * @version        : v1.0_Cube
+  * @brief          : Usb device for Virtual Com Port.
+  ******************************************************************************
+  * @attention
+  *
+  * Copyright (c) 2026 STMicroelectronics.
+  * All rights reserved.
+  *
+  * This software is licensed under terms that can be found in the LICENSE file
+  * in the root directory of this software component.
+  * If no LICENSE file comes with this software, it is provided AS-IS.
+  *
+  ******************************************************************************
+  */
+/* USER CODE END Header */
+
+/* Includes ------------------------------------------------------------------*/
+#include "usbd_cdc_if.h"
+
+/* USER CODE BEGIN INCLUDE */
+#include "waveforms.h"
+#include "stream.h"
+#include <string.h>   // strcmp, strncmp
+#include <stdlib.h>   // atoi, atof
+/* USER CODE END INCLUDE */
+
+/* Private typedef -----------------------------------------------------------*/
+/* Private define ------------------------------------------------------------*/
+/* Private macro -------------------------------------------------------------*/
+
+/* USER CODE BEGIN PV */
+/* Private variables ---------------------------------------------------------*/
+
+typedef enum { LEFT, RIGHT } canal_e;   // indices de canal
+typedef enum { OFF, ON } estado_e;      // estado de salida
+
+float frecuencia[2] = {1000.0f, 1000.0f};
+uint32_t amplitud[2] = {100, 100};
+volatile uint8_t salida_activa[2] = {ON, ON};
+
+extern volatile uint8_t modo_diferencial;   // definido en main.c (1=dif, 0=simple)
+extern volatile uint8_t adc_activo, dac_activo;   // definidos en main.c
+extern void codec_i2c_request(uint8_t op, uint8_t reg, uint8_t val);
+
+/* USER CODE END PV */
+
+/** @addtogroup STM32_USB_OTG_DEVICE_LIBRARY
+  * @brief Usb device library.
+  * @{
+  */
+
+/** @addtogroup USBD_CDC_IF
+  * @{
+  */
+
+/** @defgroup USBD_CDC_IF_Private_TypesDefinitions USBD_CDC_IF_Private_TypesDefinitions
+  * @brief Private types.
+  * @{
+  */
+
+/* USER CODE BEGIN PRIVATE_TYPES */
+
+static void parse_command(char *command);
+
+/* USER CODE END PRIVATE_TYPES */
+
+/**
+  * @}
+  */
+
+/** @defgroup USBD_CDC_IF_Private_Defines USBD_CDC_IF_Private_Defines
+  * @brief Private defines.
+  * @{
+  */
+
+/* USER CODE BEGIN PRIVATE_DEFINES */
+#define USB_RX_BUFFER_SIZE 128
+/* USER CODE END PRIVATE_DEFINES */
+
+/**
+  * @}
+  */
+
+/** @defgroup USBD_CDC_IF_Private_Macros USBD_CDC_IF_Private_Macros
+  * @brief Private macros.
+  * @{
+  */
+
+/* USER CODE BEGIN PRIVATE_MACRO */
+
+/* USER CODE END PRIVATE_MACRO */
+
+/**
+  * @}
+  */
+
+/** @defgroup USBD_CDC_IF_Private_Variables USBD_CDC_IF_Private_Variables
+  * @brief Private variables.
+  * @{
+  */
+/* Create buffer for reception and transmission           */
+/* It's up to user to redefine and/or remove those define */
+/** Received data over USB are stored in this buffer      */
+uint8_t UserRxBufferFS[APP_RX_DATA_SIZE];
+
+/** Data to send over USB CDC are stored in this buffer   */
+uint8_t UserTxBufferFS[APP_TX_DATA_SIZE];
+
+/* USER CODE BEGIN PRIVATE_VARIABLES */
+
+static uint8_t usb_rx_buffer[USB_RX_BUFFER_SIZE];
+static uint32_t usb_rx_index = 0;
+
+/* USER CODE END PRIVATE_VARIABLES */
+
+/**
+  * @}
+  */
+
+/** @defgroup USBD_CDC_IF_Exported_Variables USBD_CDC_IF_Exported_Variables
+  * @brief Public variables.
+  * @{
+  */
+
+extern USBD_HandleTypeDef hUsbDeviceFS;
+
+/* USER CODE BEGIN EXPORTED_VARIABLES */
+
+/* USER CODE END EXPORTED_VARIABLES */
+
+/**
+  * @}
+  */
+
+/** @defgroup USBD_CDC_IF_Private_FunctionPrototypes USBD_CDC_IF_Private_FunctionPrototypes
+  * @brief Private functions declaration.
+  * @{
+  */
+
+static int8_t CDC_Init_FS(void);
+static int8_t CDC_DeInit_FS(void);
+static int8_t CDC_Control_FS(uint8_t cmd, uint8_t* pbuf, uint16_t length);
+static int8_t CDC_Receive_FS(uint8_t* pbuf, uint32_t *Len);
+static int8_t CDC_TransmitCplt_FS(uint8_t *pbuf, uint32_t *Len, uint8_t epnum);
+
+/* USER CODE BEGIN PRIVATE_FUNCTIONS_DECLARATION */
+
+/* USER CODE END PRIVATE_FUNCTIONS_DECLARATION */
+
+/**
+  * @}
+  */
+
+USBD_CDC_ItfTypeDef USBD_Interface_fops_FS =
+{
+  CDC_Init_FS,
+  CDC_DeInit_FS,
+  CDC_Control_FS,
+  CDC_Receive_FS,
+  CDC_TransmitCplt_FS
+};
+
+/* Private functions ---------------------------------------------------------*/
+/**
+  * @brief  Initializes the CDC media low layer over the FS USB IP
+  * @retval USBD_OK if all operations are OK else USBD_FAIL
+  */
+static int8_t CDC_Init_FS(void)
+{
+  /* USER CODE BEGIN 3 */
+  /* Set Application Buffers */
+  USBD_CDC_SetTxBuffer(&hUsbDeviceFS, UserTxBufferFS, 0);
+  USBD_CDC_SetRxBuffer(&hUsbDeviceFS, UserRxBufferFS);
+  return (USBD_OK);
+  /* USER CODE END 3 */
+}
+
+/**
+  * @brief  DeInitializes the CDC media low layer
+  * @retval USBD_OK if all operations are OK else USBD_FAIL
+  */
+static int8_t CDC_DeInit_FS(void)
+{
+  /* USER CODE BEGIN 4 */
+  return (USBD_OK);
+  /* USER CODE END 4 */
+}
+
+/**
+  * @brief  Manage the CDC class requests
+  * @param  cmd: Command code
+  * @param  pbuf: Buffer containing command data (request parameters)
+  * @param  length: Number of data to be sent (in bytes)
+  * @retval Result of the operation: USBD_OK if all operations are OK else USBD_FAIL
+  */
+static int8_t CDC_Control_FS(uint8_t cmd, uint8_t* pbuf, uint16_t length)
+{
+  /* USER CODE BEGIN 5 */
+  switch(cmd)
+  {
+    case CDC_SEND_ENCAPSULATED_COMMAND:
+
+    break;
+
+    case CDC_GET_ENCAPSULATED_RESPONSE:
+
+    break;
+
+    case CDC_SET_COMM_FEATURE:
+
+    break;
+
+    case CDC_GET_COMM_FEATURE:
+
+    break;
+
+    case CDC_CLEAR_COMM_FEATURE:
+
+    break;
+
+  /*******************************************************************************/
+  /* Line Coding Structure                                                       */
+  /*-----------------------------------------------------------------------------*/
+  /* Offset | Field       | Size | Value  | Description                          */
+  /* 0      | dwDTERate   |   4  | Number |Data terminal rate, in bits per second*/
+  /* 4      | bCharFormat |   1  | Number | Stop bits                            */
+  /*                                        0 - 1 Stop bit                       */
+  /*                                        1 - 1.5 Stop bits                    */
+  /*                                        2 - 2 Stop bits                      */
+  /* 5      | bParityType |  1   | Number | Parity                               */
+  /*                                        0 - None                             */
+  /*                                        1 - Odd                              */
+  /*                                        2 - Even                             */
+  /*                                        3 - Mark                             */
+  /*                                        4 - Space                            */
+  /* 6      | bDataBits  |   1   | Number Data bits (5, 6, 7, 8 or 16).          */
+  /*******************************************************************************/
+    case CDC_SET_LINE_CODING:
+
+    break;
+
+    case CDC_GET_LINE_CODING:
+
+    break;
+
+    case CDC_SET_CONTROL_LINE_STATE:
+
+    break;
+
+    case CDC_SEND_BREAK:
+
+    break;
+
+  default:
+    break;
+  }
+
+  return (USBD_OK);
+  /* USER CODE END 5 */
+}
+
+/**
+  * @brief  Data received over USB OUT endpoint are sent over CDC interface
+  *         through this function.
+  *
+  *         @note
+  *         This function will issue a NAK packet on any OUT packet received on
+  *         USB endpoint until exiting this function. If you exit this function
+  *         before transfer is complete on CDC interface (ie. using DMA controller)
+  *         it will result in receiving more data while previous ones are still
+  *         not sent.
+  *
+  * @param  Buf: Buffer of data to be received
+  * @param  Len: Number of data received (in bytes)
+  * @retval Result of the operation: USBD_OK if all operations are OK else USBD_FAIL
+  */
+static int8_t CDC_Receive_FS(uint8_t* Buf, uint32_t *Len)
+{
+  /* USER CODE BEGIN 6 */
+
+  for (uint32_t i = 0; i < *Len; i++)
+  {
+    uint8_t c = Buf[i];
+
+    if (c == '\n')
+    {
+      // comando completo (llego el fin de linea)
+      usb_rx_buffer[usb_rx_index] = '\0';
+
+      // (sin eco: por el mismo COM viajan las tramas binarias del ADC)
+      parse_command((char *) usb_rx_buffer);
+
+      usb_rx_index = 0;
+    }
+    else
+    {
+      if (usb_rx_index < USB_RX_BUFFER_SIZE - 1)
+      {
+        usb_rx_buffer[usb_rx_index++] = c;
+      }
+      else
+      {
+        // Buffer lleno: descartamos el comando
+        usb_rx_index = 0;
+      }
+    }
+  }
+
+  // Preparar el USB para recibir nuevamente
+  USBD_CDC_SetRxBuffer(&hUsbDeviceFS, &Buf[0]);
+  USBD_CDC_ReceivePacket(&hUsbDeviceFS);
+
+  return (USBD_OK);
+
+  /* USER CODE END 6 */
+}
+
+/**
+  * @brief  CDC_Transmit_FS
+  *         Data to send over USB IN endpoint are sent over CDC interface
+  *         through this function.
+  *         @note
+  *
+  *
+  * @param  Buf: Buffer of data to be sent
+  * @param  Len: Number of data to be sent (in bytes)
+  * @retval USBD_OK if all operations are OK else USBD_FAIL or USBD_BUSY
+  */
+uint8_t CDC_Transmit_FS(uint8_t* Buf, uint16_t Len)
+{
+  uint8_t result = USBD_OK;
+  /* USER CODE BEGIN 7 */
+  USBD_CDC_HandleTypeDef *hcdc = (USBD_CDC_HandleTypeDef*)hUsbDeviceFS.pClassData;
+  if (hcdc->TxState != 0){
+    return USBD_BUSY;
+  }
+  USBD_CDC_SetTxBuffer(&hUsbDeviceFS, Buf, Len);
+  result = USBD_CDC_TransmitPacket(&hUsbDeviceFS);
+  /* USER CODE END 7 */
+  return result;
+}
+
+/**
+  * @brief  CDC_TransmitCplt_FS
+  *         Data transmitted callback
+  *
+  *         @note
+  *         This function is IN transfer complete callback used to inform user that
+  *         the submitted Data is successfully sent over USB.
+  *
+  * @param  Buf: Buffer of data to be received
+  * @param  Len: Number of data received (in bytes)
+  * @retval Result of the operation: USBD_OK if all operations are OK else USBD_FAIL
+  */
+static int8_t CDC_TransmitCplt_FS(uint8_t *Buf, uint32_t *Len, uint8_t epnum)
+{
+  uint8_t result = USBD_OK;
+  /* USER CODE BEGIN 13 */
+  UNUSED(Buf);
+  UNUSED(Len);
+  UNUSED(epnum);
+  stream_tx_done();   // encadena el siguiente bloque de audio pendiente
+  /* USER CODE END 13 */
+  return result;
+}
+
+/* USER CODE BEGIN PRIVATE_FUNCTIONS_IMPLEMENTATION */
+
+static void parse_command(char *command)
+{
+    // Frecuencia canal izquierdo
+    if (strncmp(command, "LFREQ:", 6) == 0)
+    {
+        frecuencia[LEFT] = atof(&command[6]);
+    }
+
+    // Frecuencia canal derecho
+    else if (strncmp(command, "RFREQ:", 6) == 0)
+    {
+        frecuencia[RIGHT] = atof(&command[6]);
+    }
+
+    // Amplitud canal izquierdo
+    else if (strncmp(command, "LAMP:", 5) == 0)
+    {
+        amplitud[LEFT] = atoi(&command[5]);
+    }
+
+    // Amplitud canal derecho
+    else if (strncmp(command, "RAMP:", 5) == 0)
+    {
+        amplitud[RIGHT] = atoi(&command[5]);
+    }
+
+    // Encender canal izquierdo
+    else if (strcmp(command, "LON") == 0)
+    {
+        salida_activa[LEFT] = 1;
+    }
+
+    // Encender canal derecho
+    else if (strcmp(command, "RON") == 0)
+    {
+        salida_activa[RIGHT] = 1;
+    }
+
+    // Apagar canal izquierdo
+    else if (strcmp(command, "LOFF") == 0)
+    {
+        salida_activa[LEFT] = 0;
+    }
+
+    // Apagar canal derecho
+    else if (strcmp(command, "ROFF") == 0)
+    {
+        salida_activa[RIGHT] = 0;
+    }
+
+    // Forma de onda canal izquierdo (0=seno 1=cuadrada 2=triangular 3=chirp)
+    else if (strncmp(command, "LWAVE:", 6) == 0)
+    {
+        waveform[LEFT] = (waveform_t)atoi(&command[6]);
+    }
+
+    // Forma de onda canal derecho
+    else if (strncmp(command, "RWAVE:", 6) == 0)
+    {
+        waveform[RIGHT] = (waveform_t)atoi(&command[6]);
+    }
+
+    // Chirp canal izquierdo: "LCHIRP:f0,f1,duracion"
+    else if (strncmp(command, "LCHIRP:", 7) == 0)
+    {
+        char *f0 = strtok(&command[7], ",");
+        char *f1 = strtok(NULL, ",");
+        char *dur = strtok(NULL, ",");
+        if (f0 && f1 && dur)
+            chirp_config(LEFT, atof(f0), atof(f1), atof(dur));
+    }
+
+    // Chirp canal derecho
+    else if (strncmp(command, "RCHIRP:", 7) == 0)
+    {
+        char *f0 = strtok(&command[7], ",");
+        char *f1 = strtok(NULL, ",");
+        char *dur = strtok(NULL, ",");
+        if (f0 && f1 && dur)
+            chirp_config(RIGHT, atof(f0), atof(f1), atof(dur));
+    }
+
+    // Salida diferencial
+    else if (strcmp(command, "DIFF") == 0)
+    {
+        modo_diferencial = 1;
+    }
+
+    // Salida simple (single-ended)
+    else if (strcmp(command, "SE") == 0)
+    {
+        modo_diferencial = 0;
+    }
+
+    // Streaming del ADC hacia la PC
+    else if (strcmp(command, "STREAM:1") == 0)
+    {
+        stream_on = 1;
+    }
+    else if (strcmp(command, "STREAM:0") == 0)
+    {
+        stream_on = 0;
+    }
+
+    // ADC y DAC del codec (encendido / apagado)
+    else if (strncmp(command, "ADC:", 4) == 0)
+    {
+        adc_activo = (atoi(&command[4]) != 0);
+    }
+    else if (strncmp(command, "DAC:", 4) == 0)
+    {
+        dac_activo = (atoi(&command[4]) != 0);
+    }
+
+    // Registros del codec por I2C: "I2CW:reg,valor" (escribe) / "I2CR:reg" (lee y responde por texto)
+    else if (strncmp(command, "I2CW:", 5) == 0)
+    {
+        char *r = strtok(&command[5], ",");
+        char *v = strtok(NULL, ",");
+        if (r && v)
+            codec_i2c_request(1, (uint8_t)strtol(r, NULL, 0), (uint8_t)strtol(v, NULL, 0));
+    }
+    else if (strncmp(command, "I2CR:", 5) == 0)
+    {
+        codec_i2c_request(2, (uint8_t)strtol(&command[5], NULL, 0), 0);
+    }
+
+    // Prueba de comunicacion
+    else if (strcmp(command, "PING") == 0)
+    {
+        stream_push_text("PONG");
+    }
+}
+
+/* USER CODE END PRIVATE_FUNCTIONS_IMPLEMENTATION */
+
+/**
+  * @}
+  */
+
+/**
+  * @}
+  */
