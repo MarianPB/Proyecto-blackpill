@@ -65,8 +65,16 @@ y el reloj salía por MCO1/PA8; acá el reloj es el MCLK del I2S, como en AGSE).
 ## Cómo usarlo
 
 1. Abrir la carpeta como proyecto en STM32CubeIDE, compilar y cargar (chip **STM32F411CEUx**, como AGSE).
-2. En la PC: `pip install pyserial numpy matplotlib` y `python pc/comandos.py`.
-3. Elegir el COM del STM32, **Conectar**, y en "Codec PCM3060" → **Ver señal del ADC** → **Iniciar captura**.
+2. En la PC: `pip install pyserial numpy matplotlib` y `python pc/comandos.py` (si hay varios Pythons instalados,
+   usar el mismo para instalar y para correr, por ejemplo `py -3.12 -m pip install ...` y `py -3.12 pc/comandos.py`;
+   un entorno virtual también sirve). Sin `pyserial` la app no arranca; sin `numpy`/`matplotlib` abre, pero el visor no.
+3. Elegir el COM del STM32, **Conectar**, y en "Codec PCM3060" → **Ver señal del ADC**. Cerrar antes cualquier otro
+   programa que tenga abierto ese COM (monitor serie del IDE, PuTTY).
+4. En el visor: **Iniciar captura** para ver la señal en vivo, o el panel **Medición** (ver "Mediciones" más abajo):
+   elegir *Tiempo fijo* (duración y segundos a descartar) o *Continuo*, decidir si se dispara el DAC, y **Iniciar
+   medición**. La forma de onda, frecuencia y amplitud del DAC se eligen antes en la ventana principal.
+5. «Probar comunicación» manda `PING`; la respuesta `PONG` se ve en la barra de estado **del visor** (hay que
+   abrirlo primero) y solo cuando no hay una captura en curso.
 
 ## Configurar en CubeMX (para que el .ioc coincida con el código y se pueda regenerar)
 
