@@ -1,0 +1,2011 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Viaje de Datos: STM32F411 USB CDC &lt;-&gt; PC</title>
+  <style>
+    :root {
+      --bg: #0b0f19;
+      --surface: #131d31;
+      --surface-2: #1c2b46;
+      --border: #243553;
+      --text: #f1f5f9;
+      --text-muted: #94a3b8;
+      --text-dim: #64748b;
+      --fw-color: #10b981;
+      --fw-bg: rgba(16, 185, 129, 0.12);
+      --fw-border: #059669;
+      --usb-color: #0284c7;
+      --usb-bg: rgba(2, 132, 199, 0.12);
+      --usb-border: #0369a1;
+      --pc-color: #8b5cf6;
+      --pc-bg: rgba(139, 92, 246, 0.12);
+      --pc-border: #6d28d9;
+      --warn-color: #f59e0b;
+      --danger-color: #ef4444;
+      --font-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+      --font-sans: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      --shadow: 0 4px 20px rgba(0, 0, 0, 0.4);
+    }
+    body.light {
+      --bg: #f8fafc;
+      --surface: #ffffff;
+      --surface-2: #f1f5f9;
+      --border: #cbd5e1;
+      --text: #0f172a;
+      --text-muted: #475569;
+      --text-dim: #94a3b8;
+      --fw-color: #047857;
+      --fw-bg: rgba(16, 185, 129, 0.15);
+      --fw-border: #10b981;
+      --usb-color: #0369a1;
+      --usb-bg: rgba(2, 132, 199, 0.15);
+      --usb-border: #0284c7;
+      --pc-color: #6d28d9;
+      --pc-bg: rgba(139, 92, 246, 0.15);
+      --pc-border: #8b5cf6;
+      --warn-color: #b45309;
+      --danger-color: #dc2626;
+      --shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      background-color: var(--bg);
+      color: var(--text);
+      font-family: var(--font-sans);
+      line-height: 1.5;
+      padding-bottom: 80px;
+      transition: background-color 0.25s, color 0.25s;
+    }
+    header {
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+      position: sticky;
+      top: 0;
+      z-index: 100;
+      box-shadow: var(--shadow);
+    }
+    .header-inner {
+      max-width: 1400px;
+      margin: 0 auto;
+      padding: 0.8rem 1.2rem;
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+    }
+    .brand { display: flex; align-items: center; gap: 10px; font-weight: 700; font-size: 1.15rem; flex-wrap: wrap; }
+    .badge-tag {
+      font-size: 0.72rem;
+      padding: 2px 8px;
+      border-radius: 999px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      display: inline-block;
+    }
+    .badge-fw { background: var(--fw-bg); color: var(--fw-color); border: 1px solid var(--fw-border); }
+    .badge-usb { background: var(--usb-bg); color: var(--usb-color); border: 1px solid var(--usb-border); }
+    .badge-pc { background: var(--pc-bg); color: var(--pc-color); border: 1px solid var(--pc-border); }
+    .badge-verified { background: rgba(16, 185, 129, 0.2); color: var(--fw-color); border: 1px solid var(--fw-color); }
+    .badge-assumed { background: rgba(245, 158, 11, 0.2); color: var(--warn-color); border: 1px dashed var(--warn-color); }
+    .badge-loss { background: rgba(239, 68, 68, 0.18); color: var(--danger-color); border: 1px solid var(--danger-color); }
+    nav { display: flex; flex-wrap: wrap; gap: 6px; }
+    nav a {
+      color: var(--text-muted);
+      text-decoration: none;
+      padding: 5px 10px;
+      border-radius: 6px;
+      font-size: 0.85rem;
+      font-weight: 500;
+      transition: 0.2s;
+    }
+    nav a:hover { background: var(--surface-2); color: var(--text); }
+    .theme-toggle {
+      background: var(--surface-2);
+      border: 1px solid var(--border);
+      color: var(--text);
+      cursor: pointer;
+      padding: 6px 12px;
+      border-radius: 6px;
+      font-size: 0.85rem;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    main {
+      max-width: 1400px;
+      margin: 1.5rem auto;
+      padding: 0 1rem;
+      display: flex;
+      flex-direction: column;
+      gap: 2.5rem;
+    }
+    section.module-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 1.5rem;
+      box-shadow: var(--shadow);
+      display: flex;
+      flex-direction: column;
+      gap: 1.2rem;
+      scroll-margin-top: 90px;
+    }
+    .module-header {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: space-between;
+      align-items: baseline;
+      border-bottom: 1px solid var(--border);
+      padding-bottom: 0.75rem;
+      gap: 10px;
+    }
+    .module-title { font-size: 1.3rem; font-weight: 700; display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+    .what-am-i-seeing {
+      background: var(--surface-2);
+      border-left: 4px solid var(--usb-color);
+      border-radius: 0 8px 8px 0;
+      padding: 0.85rem 1.1rem;
+      font-size: 0.92rem;
+      color: var(--text-muted);
+    }
+    .what-am-i-seeing strong { color: var(--text); }
+    .what-am-i-seeing.warn { border-left-color: var(--warn-color); }
+    .what-am-i-seeing ul { margin-left: 1.1rem; }
+    .controls-bar {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 10px;
+      background: var(--surface-2);
+      padding: 0.6rem 0.9rem;
+      border-radius: 8px;
+      border: 1px solid var(--border);
+    }
+    .btn {
+      background: var(--surface);
+      color: var(--text);
+      border: 1px solid var(--border);
+      padding: 6px 14px;
+      border-radius: 6px;
+      font-size: 0.85rem;
+      font-weight: 600;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      transition: 0.15s;
+    }
+    .btn:hover { background: var(--border); }
+    .btn:disabled { opacity: 0.45; cursor: default; }
+    .btn-primary { background: var(--usb-color); color: #fff; border-color: var(--usb-border); }
+    .btn-primary:hover { opacity: 0.9; background: var(--usb-color); }
+    .btn-danger { background: var(--danger-color); color: #fff; border-color: #b91c1c; }
+    .btn-danger:hover { background: var(--danger-color); opacity: 0.9; }
+    .slider-group { display: flex; align-items: center; gap: 8px; font-size: 0.82rem; color: var(--text-muted); }
+    .slider-group input[type="range"] { cursor: pointer; accent-color: var(--usb-color); }
+    .ctl {
+      background: var(--surface);
+      color: var(--text);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 5px 8px;
+      font-size: 0.86rem;
+      font-family: var(--font-mono);
+    }
+    input.ctl[type=number] { width: 130px; }
+    input.ctl[type=text] { width: 190px; }
+    .code-inspector { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; font-family: var(--font-mono); font-size: 0.82rem; }
+    @media (max-width: 900px) { .code-inspector { grid-template-columns: 1fr; } }
+    .code-panel {
+      background: #060911;
+      color: #e2e8f0;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 0.85rem;
+      overflow-x: auto;
+    }
+    body.light .code-panel { background: #1e293b; color: #f8fafc; }
+    .code-panel-header {
+      font-weight: 700;
+      margin-bottom: 0.5rem;
+      color: #7dd3fc;
+      display: flex;
+      justify-content: space-between;
+      gap: 8px;
+      font-size: 0.75rem;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+    .code-line { padding: 1px 4px; border-radius: 4px; white-space: pre; border-left: 3px solid transparent; }
+    .code-line.active { background: rgba(245, 158, 11, 0.3); color: #fef08a; font-weight: 700; border-left: 3px solid var(--warn-color); }
+    .code-line.cmt { color: #94a3b8; }
+    .state-table { width: 100%; border-collapse: collapse; font-size: 0.85rem; }
+    .state-table th, .state-table td { padding: 6px 10px; border: 1px solid var(--border); text-align: left; vertical-align: top; }
+    .state-table th { background: var(--surface-2); color: var(--text-muted); font-weight: 600; }
+    .code-panel .state-table th { background: rgba(255,255,255,0.06); color: #cbd5e1; }
+    .code-panel .state-table td, .code-panel .state-table th { border-color: #334155; }
+    .canvas-container { position: relative; background: #080d1a; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; min-height: 280px; }
+    body.light .canvas-container { background: #f1f5f9; }
+    canvas { display: block; width: 100%; height: 100%; }
+    .interactive-tabs { display: flex; flex-wrap: wrap; border-bottom: 1px solid var(--border); gap: 4px; }
+    .tab-btn {
+      background: none;
+      border: none;
+      color: var(--text-muted);
+      padding: 8px 16px;
+      cursor: pointer;
+      font-weight: 600;
+      font-size: 0.9rem;
+      border-bottom: 2px solid transparent;
+    }
+    .tab-btn.active { color: var(--usb-color); border-bottom-color: var(--usb-color); }
+    .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 15px; }
+    @media (max-width: 800px) { .grid-2 { grid-template-columns: 1fr; } }
+    .box { background: var(--surface-2); padding: 10px; border-radius: 6px; border: 1px solid var(--border); font-size: 0.86rem; color: var(--text-muted); }
+    .box strong { color: var(--text); }
+    .mono { font-family: var(--font-mono); font-size: 0.82rem; }
+    .scroll { overflow-x: auto; }
+    .quiz-question { background: var(--surface-2); border: 1px solid var(--border); border-radius: 8px; padding: 1rem; margin-bottom: 0.8rem; }
+    .quiz-options { display: flex; flex-direction: column; gap: 6px; margin-top: 0.6rem; }
+    .quiz-opt {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      padding: 8px 12px;
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 0.88rem;
+      text-align: left;
+      color: var(--text);
+      transition: 0.15s;
+    }
+    .quiz-opt:hover { background: var(--surface-2); }
+    .quiz-opt.correct { background: rgba(16, 185, 129, 0.2) !important; border-color: #10b981 !important; color: var(--fw-color) !important; font-weight: bold; }
+    .quiz-opt.incorrect { background: rgba(239, 68, 68, 0.2) !important; border-color: #ef4444 !important; color: var(--danger-color) !important; }
+    .quiz-exp { margin-top: 8px; font-size: 0.85rem; padding: 8px; border-radius: 6px; background: var(--surface); display: none; }
+
+    /* ---- módulo 3: chips de bytes ---- */
+    .m3-row { display: flex; flex-wrap: wrap; gap: 12px; align-items: flex-end; }
+    .m3-field { display: flex; flex-direction: column; gap: 3px; font-size: 0.78rem; color: var(--text-muted); }
+    .hex { display: flex; flex-wrap: wrap; gap: 5px; font-family: var(--font-mono); font-size: 0.85rem; }
+    .bt { padding: 4px 7px; border-radius: 5px; cursor: pointer; border: 2px solid transparent; user-select: none; }
+    .bt.sync { background: var(--warn-color); color: #000; }
+    .bt.tipo { background: var(--fw-color); color: #fff; }
+    .bt.seq { background: var(--usb-color); color: #fff; }
+    .bt.n { background: var(--pc-color); color: #fff; }
+    .bt.L { background: var(--surface); border-color: var(--fw-color); }
+    .bt.R { background: var(--surface); border-color: var(--usb-color); }
+    .bt.txt { background: var(--surface); border-color: var(--pc-color); }
+    .bt.plain { background: var(--surface); border-color: var(--border); cursor: default; }
+    .bt.more { background: none; border: 1px dashed var(--border); color: var(--text-muted); cursor: default; }
+    .bt.sel { outline: 2px solid var(--text); }
+    .sep { border-left: 2px solid var(--border); margin: 0 3px; }
+    .info-box { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 10px; font-size: 0.86rem; min-height: 56px; color: var(--text-muted); }
+    .legend { display: flex; flex-wrap: wrap; gap: 8px; font-size: 0.75rem; }
+    .okc { color: var(--fw-color); font-weight: 700; }
+    .badc { color: var(--danger-color); font-weight: 700; }
+    .bit-sign { color: var(--danger-color); font-weight: 700; }
+    .pad { color: var(--text-dim); }
+    .log { max-height: 230px; overflow: auto; font-family: var(--font-mono); font-size: 0.78rem; background: var(--surface-2); border: 1px solid var(--border); border-radius: 8px; padding: 8px; }
+    .log div { padding: 1px 0; }
+    .log .cur { background: rgba(245, 158, 11, 0.25); }
+
+    /* ---- módulo 5: etapas ---- */
+    .flow { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+    .flow .stage { padding: 8px 12px; border: 2px solid var(--border); border-radius: 8px; font-size: 0.8rem; background: var(--surface-2); color: var(--text-muted); }
+    .flow .stage.on { border-color: var(--warn-color); color: var(--text); box-shadow: 0 0 10px rgba(245, 158, 11, 0.45); }
+    .flow .arrow { color: var(--text-dim); }
+    .pkt { display: inline-block; font-family: var(--font-mono); font-size: 0.8rem; padding: 3px 8px; margin: 2px; border-radius: 6px; border: 1px solid var(--border); background: var(--surface); color: var(--text-muted); }
+    .pkt.cur { border-color: var(--warn-color); color: var(--text); background: rgba(245,158,11,0.18); }
+    .pkt.done { opacity: 0.55; }
+  </style>
+</head>
+<body>
+
+<header>
+  <div class="header-inner">
+    <div class="brand">
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
+      <span>Viaje de Datos: STM32F411 &harr; PC</span>
+      <span class="badge-tag badge-fw">Firmware</span>
+      <span class="badge-tag badge-usb">USB CDC</span>
+      <span class="badge-tag badge-pc">Python</span>
+    </div>
+    <nav>
+      <a href="#mod1">1. Mapa Completo</a>
+      <a href="#mod2">2. Ring Buffer</a>
+      <a href="#mod3">3. Bytes &amp; Tramas</a>
+      <a href="#mod4">4. USB CDC &amp; COM</a>
+      <a href="#mod5">5. Comandos Inversos</a>
+      <a href="#mod6">6. Interrupciones</a>
+      <a href="#mod7">7. Glosario &amp; Quiz</a>
+    </nav>
+    <button class="theme-toggle" id="themeBtn" onclick="toggleTheme()">
+      <span id="themeIcon">&#9790;</span> <span id="themeLabel">Modo Claro</span>
+    </button>
+  </div>
+</header>
+
+<main>
+
+  <!-- ============================ MODULO 1 ============================ -->
+  <section class="module-card" id="mod1">
+    <div class="module-header">
+      <div class="module-title">
+        <span>1. Mapa Completo del Viaje de un Dato (Punta a Punta)</span>
+        <span class="badge-tag badge-verified">Código real</span>
+      </div>
+      <div>
+        <span class="badge-tag badge-fw">STM32 96 MHz</span> &rarr;
+        <span class="badge-tag badge-usb">USB Full Speed 12 Mbit/s</span> &rarr;
+        <span class="badge-tag badge-pc">Host Windows</span>
+      </div>
+    </div>
+
+    <div class="what-am-i-seeing">
+      <strong>¿Qué estoy viendo?</strong> El recorrido de una muestra de audio estéreo (97&nbsp;656,25 Hz, 24 bits) desde el ADC del PCM3060 hasta el gráfico en Python. Mientras el punto avanza, los paneles de abajo resaltan <strong>la línea de código que corre en ese paso</strong> (firmware a la izquierda, Python a la derecha). Hacé clic en cualquier nodo para detener la animación y ver su detalle. El código de los paneles es el de tu proyecto (<code>main.c</code>, <code>stream.c</code>, <code>visor_adc.py</code>), abreviado donde se indica.
+    </div>
+
+    <div class="controls-bar">
+      <button class="btn btn-primary" id="m1PlayBtn" onclick="toggleM1Play()">&#10074;&#10074; Pausa</button>
+      <button class="btn" onclick="stepM1()">&#9197; Paso a paso</button>
+      <button class="btn" onclick="resetM1()">&#8634; Reiniciar</button>
+      <div class="slider-group">
+        <label for="m1Speed">Velocidad:</label>
+        <input type="range" id="m1Speed" min="0.2" max="3" step="0.2" value="1" oninput="updateM1Speed(this.value)">
+        <span id="m1SpeedVal">1.0x</span>
+      </div>
+    </div>
+
+    <div class="canvas-container" style="height: 380px;">
+      <canvas id="m1Canvas"></canvas>
+    </div>
+
+    <div class="code-inspector">
+      <div class="code-panel">
+        <div class="code-panel-header">
+          <span>Firmware (STM32)</span>
+          <span id="m1FwContext" class="badge-tag badge-fw">-</span>
+        </div>
+        <div id="m1FwCode"></div>
+      </div>
+      <div class="code-panel">
+        <div class="code-panel-header">
+          <span>PC (Python, visor_adc.py)</span>
+          <span id="m1PcContext" class="badge-tag badge-pc">-</span>
+        </div>
+        <div id="m1PcCode"></div>
+      </div>
+    </div>
+
+    <div class="grid-2">
+      <div class="box">
+        <strong>Detalle del bloque seleccionado:</strong>
+        <div id="m1NodeDetail" style="margin-top:6px;"></div>
+      </div>
+      <div class="box">
+        <strong>Números del flujo I2S &rarr; ring buffer:</strong>
+        <div class="mono" style="margin-top:6px; line-height:1.7">
+          Ts = 1 / 97&nbsp;656,25 Hz = 10,24 &micro;s<br>
+          Callback del DMA = 256 &times; 10,24 &micro;s = 2,621 ms<br>
+          Trama de audio = 6 B + 256 &times; 6 B = 1542 B<br>
+          Tramas por segundo = 97&nbsp;656,25 / 256 = 381,47<br>
+          Flujo = 1542 B &times; 381,47 /s &asymp; <strong>588 kB/s</strong> con encabezados<br>
+          (586 kB/s de audio puro = 97&nbsp;656,25 &times; 6 B)
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============================ MODULO 2 ============================ -->
+  <section class="module-card" id="mod2">
+    <div class="module-header">
+      <div class="module-title">
+        <span>2. Simulador del Ring Buffer y Cuello de Botella</span>
+        <span class="badge-tag badge-verified">Lógica de stream.c</span>
+        <span class="badge-tag badge-assumed">Parámetros ilustrativos</span>
+      </div>
+      <div>
+        <span id="m2DropBadge" class="badge-tag badge-fw">Tramas perdidas: 0 (0.0%)</span>
+      </div>
+    </div>
+
+    <div class="what-am-i-seeing">
+      <strong>¿Qué estoy viendo?</strong> El ring de <code>stream.c</code>. El DMA mete una trama de 1542 B cada 2,62 ms; el USB la saca en bloques de hasta 4096 B (zero-copy: <code>tail</code> avanza recién al terminar). El host puede <strong>congelarse</strong> un rato (por ejemplo, la GUI de Python redibujando mientras el hilo lector espera el GIL): mientras no atiende, el ring se llena y, si no entra la trama entera, se descarta (<code>stream_dropped++</code>, <code>seq++</code>).
+      <br><strong>Ojo:</strong> la lógica del ring es la real, pero <strong>la duración y frecuencia de los congelamientos y el throughput efectivo del USB son supuestos</strong> tuyos para experimentar; no son mediciones de tu hardware. El gráfico de abajo muestra la ocupación en los últimos 3 s (zonas rojas = host congelado).
+    </div>
+
+    <div class="controls-bar">
+      <button class="btn btn-primary" id="m2PlayBtn" onclick="toggleM2Play()">&#10074;&#10074; Pausa</button>
+      <button class="btn" onclick="stepM2()">&#9197; Avanzar 10 ms</button>
+      <button class="btn" onclick="resetM2()">&#8634; Reiniciar</button>
+      <button class="btn btn-danger" onclick="escenarioIlustrativo()">&#9889; Escenario ilustrativo (16 kB, host 70 ms cada 500 ms)</button>
+      <button class="btn" onclick="escenarioRing64()">Mismo escenario con ring de 64 kB</button>
+    </div>
+    <div class="controls-bar">
+      <div class="slider-group">
+        <label for="m2HostPause">Congelamiento del host:</label>
+        <input type="range" id="m2HostPause" min="0" max="150" step="5" value="0" oninput="updateM2Cfg()">
+        <span id="m2HostPauseVal">0 ms</span>
+      </div>
+      <div class="slider-group">
+        <label for="m2Every">se repite cada:</label>
+        <input type="range" id="m2Every" min="200" max="2000" step="100" value="500" oninput="updateM2Cfg()">
+        <span id="m2EveryVal">500 ms</span>
+      </div>
+      <div class="slider-group">
+        <label for="m2Usb">Throughput USB efectivo:</label>
+        <input type="range" id="m2Usb" min="400" max="1200" step="50" value="1000" oninput="updateM2Cfg()">
+        <span id="m2UsbVal">1000 kB/s</span>
+      </div>
+      <div class="slider-group">
+        <label for="m2RingSize">Tamaño del ring:</label>
+        <select id="m2RingSize" class="ctl" onchange="changeRingSize(this.value)">
+          <option value="4096">4 096 B</option>
+          <option value="8192">8 192 B</option>
+          <option value="16384" selected>16 384 B (real)</option>
+          <option value="32768">32 768 B</option>
+          <option value="65536">65 536 B (propuesto)</option>
+        </select>
+      </div>
+      <div class="slider-group">
+        <label for="m2Speed">Velocidad:</label>
+        <input type="range" id="m2Speed" min="0.1" max="4" step="0.1" value="0.5" oninput="updateM2Cfg()">
+        <span id="m2SpeedVal">0.5x</span>
+      </div>
+    </div>
+
+    <div class="canvas-container" style="height: 400px;">
+      <canvas id="m2Canvas"></canvas>
+    </div>
+
+    <div class="what-am-i-seeing" id="m2Aguante"></div>
+
+    <div class="code-inspector">
+      <div class="code-panel">
+        <div class="code-panel-header">
+          <span>Variables de stream.c (en vivo)</span>
+          <span class="badge-tag badge-usb">Zero-Copy</span>
+        </div>
+        <table class="state-table">
+          <tr><th>Variable</th><th>Valor</th><th>Índice (&amp; MASK)</th><th>Qué es</th></tr>
+          <tr><td><code>head</code></td><td id="m2HeadVal">0</td><td id="m2HeadIdx">0</td><td>Bytes escritos en total (DMA)</td></tr>
+          <tr><td><code>tail</code></td><td id="m2TailVal">0</td><td id="m2TailIdx">0</td><td>Bytes ya confirmados por el USB</td></tr>
+          <tr><td><code>inflight</code></td><td id="m2InflightVal">0</td><td>-</td><td>Bloque que el USB está mandando</td></tr>
+          <tr><td><code>ring_free()</code></td><td id="m2FreeVal">16384</td><td>-</td><td>Lugar libre para tramas nuevas</td></tr>
+          <tr><td><code>stream_dropped</code></td><td id="m2DropVal" style="color:var(--danger-color)">0</td><td>-</td><td>Tramas descartadas (ring lleno)</td></tr>
+          <tr><td>Bloques cortados por el final del array</td><td id="m2WrapVal">0</td><td>-</td><td>El resto sale en otra transferencia</td></tr>
+        </table>
+      </div>
+      <div class="code-panel">
+        <div class="code-panel-header">
+          <span>Líneas que se ejecutan (se resaltan con cada evento)</span>
+          <span id="m2BranchBadge" class="badge-tag badge-fw">-</span>
+        </div>
+        <div id="m2CodeBlock"></div>
+        <div style="margin-top:8px; font-size:0.75rem; color:#94a3b8; white-space:normal">
+          * <em>Zero-copy:</em> <code>tail</code> solo avanza en <code>stream_tx_done()</code>. Si avanzara antes, el DMA podría pisar memoria que el USB todavía está leyendo.
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============================ MODULO 3 ============================ -->
+  <section class="module-card" id="mod3">
+    <div class="module-header">
+      <div class="module-title">
+        <span>3. Cómo Está Construida Cada Trama, Byte por Byte</span>
+        <span class="badge-tag badge-verified">Little-Endian 24-bit</span>
+      </div>
+      <div>
+        <span class="badge-tag badge-pc">Parser Python</span>
+      </div>
+    </div>
+
+    <div class="what-am-i-seeing">
+      <strong>¿Qué estoy viendo?</strong> El formato exacto que arma <code>stream.c</code> y que decodifica <code>visor_adc.py</code>, con cada byte explicado y cómo está codificado. Todo sale del código real; lo que es interpretación mía está marcado como tal.
+    </div>
+
+    <!-- A. ANATOMIA -->
+    <h3>A. Encabezado de 6 bytes (igual para audio y texto)</h3>
+    <div class="scroll"><table class="state-table">
+      <tr><th>Offset</th><th>Tamaño</th><th>Campo</th><th>Codificación / valores</th><th>Firmware (<code>begin_frame</code>)</th><th>Python (<code>_procesar</code>)</th></tr>
+      <tr><td>0</td><td>1</td><td>sync 0</td><td>constante <code>0xAA</code> = <code>10101010</code></td><td><code>ring_put(STREAM_SYNC0)</code></td><td><code>buf.find(SYNC)</code> con <code>SYNC = b"\xAA\x55"</code></td></tr>
+      <tr><td>1</td><td>1</td><td>sync 1</td><td>constante <code>0x55</code> = <code>01010101</code></td><td><code>ring_put(STREAM_SYNC1)</code></td><td>(ídem)</td></tr>
+      <tr><td>2</td><td>1</td><td>tipo</td><td><code>0x01</code> audio · <code>0x02</code> texto. Cualquier otro valor se toma como falso sincronismo.</td><td><code>ring_put(type)</code></td><td><code>tipo = buf[2]</code></td></tr>
+      <tr><td>3</td><td>1</td><td>seq</td><td>entero sin signo de 8 bits. Sube 1 por cada trama, <b>incluidas las descartadas</b>, y da la vuelta <code>255 &rarr; 0</code>.</td><td><code>ring_put(seq++)</code> (y <code>seq++</code> al descartar)</td><td><code>seq = buf[3]</code></td></tr>
+      <tr><td>4&ndash;5</td><td>2</td><td>n</td><td>entero sin signo de 16 bits, <b>little-endian</b>: primero el byte bajo, después el alto. Audio: cantidad de <i>frames</i>. Texto: cantidad de <i>caracteres</i>.</td><td><code>ring_put(n &amp; 0xFF); ring_put(n &gt;&gt; 8)</code></td><td><code>n = buf[4] | (buf[5] &lt;&lt; 8)</code></td></tr>
+      <tr><td>6&hellip;</td><td>audio: n&times;6<br>texto: n</td><td>payload</td><td>audio: por frame <code>[L0 L1 L2 R0 R1 R2]</code>, 24 bits con signo por canal, byte menos significativo primero. Texto: ASCII, un byte por carácter, sin terminador.</td><td><code>ring_put(...)</code> en <code>stream_push_audio</code> / <code>stream_push_text</code></td><td><code>payload = buf[HDR:HDR+largo]</code></td></tr>
+    </table></div>
+    <div class="what-am-i-seeing">Tamaños: trama de audio = 6 + 256&times;6 = <b>1542 B</b> (una cada 2,62 ms). Trama de texto = 6 + n (por ejemplo <code>PONG</code> = 10 B). Sin checksum: el USB ya protege el cable con CRC y reintentos; el único control propio es <code>seq</code>.</div>
+
+    <!-- B. CONSTRUCTOR -->
+    <h3>B. Constructor interactivo: armá una trama y mirá cómo se codifica</h3>
+    <div class="m3-row">
+      <div class="m3-field">Tipo
+        <select id="fTipo" class="ctl"><option value="audio">0x01 audio</option><option value="texto">0x02 texto</option></select></div>
+      <div class="m3-field">seq (0&ndash;255)<input type="number" id="fSeq" class="ctl" min="0" max="255" value="42"></div>
+      <div class="m3-field" id="boxN">n (frames)<input type="number" id="fN" class="ctl" min="1" max="4096" value="256"></div>
+      <div class="m3-field" id="boxL">Muestra L (entero de 24 bits con signo)<input type="number" id="fL" class="ctl" min="-8388608" max="8388607" value="5649426"></div>
+      <div class="m3-field" id="boxR">Muestra R<input type="number" id="fR" class="ctl" min="-8388608" max="8388607" value="-4530946"></div>
+      <div class="m3-field" id="boxT" style="display:none">Texto (ASCII)<input type="text" id="fT" class="ctl" maxlength="16" value="PONG"></div>
+    </div>
+    <div class="m3-row" id="presets">
+      <span class="m3-field">Presets:</span>
+      <button class="btn" data-l="0" data-r="0">0 (silencio)</button>
+      <button class="btn" data-l="4194304" data-r="-4194304">+0,5 / &minus;0,5</button>
+      <button class="btn" data-l="8388607" data-r="-8388608">+máx / &minus;máx</button>
+      <button class="btn" data-l="-1" data-r="1">&minus;1 / +1 (1 LSB)</button>
+      <button class="btn" data-l="5649426" data-r="-4530946">ejemplo</button>
+    </div>
+    <div class="legend">
+      <span class="bt sync" style="cursor:default">sync</span><span class="bt tipo" style="cursor:default">tipo</span>
+      <span class="bt seq" style="cursor:default">seq</span><span class="bt n" style="cursor:default">n</span>
+      <span class="bt L" style="cursor:default">canal L</span><span class="bt R" style="cursor:default">canal R</span><span class="bt txt" style="cursor:default">texto</span>
+    </div>
+    <div class="hex" id="hexOut"></div>
+    <div class="mono" id="sizeOut" style="color:var(--text-muted)"></div>
+    <div class="info-box" id="byteInfo">Pasá el mouse o tocá un byte para ver qué significa.</div>
+
+    <div id="pipeBox">
+      <div class="m3-row" style="margin-bottom:6px">
+        <h3 style="margin:0" id="pipeTitle">De la señal analógica al byte: recorrido de una muestra</h3>
+        <div class="m3-field" id="boxCanal">Canal<select id="fCanal" class="ctl"><option value="L">L</option><option value="R">R</option></select></div>
+      </div>
+      <div class="scroll" id="pipeOut"></div>
+    </div>
+
+    <!-- C. LITTLE ENDIAN -->
+    <h3>C. Little-endian: por qué <code>n = 256</code> viaja como <code>00 01</code></h3>
+    <div class="grid-2">
+      <div class="info-box" id="leOut"></div>
+      <div class="what-am-i-seeing warn">Si el receptor lo leyera al revés (big-endian) vería <code id="leWrong"></code> en lugar del valor real. En un flujo continuo eso desalinea todo lo que sigue. El mismo criterio aplica a las muestras de 24 bits: el byte <b>menos</b> significativo sale primero (<code>L0</code>).</div>
+    </div>
+
+    <!-- D. SEQ -->
+    <h3>D. Cómo se detectan las tramas perdidas con <code>seq</code></h3>
+    <div class="m3-row">
+      <div class="m3-field">Último seq recibido<input type="number" id="sLast" class="ctl" min="0" max="255" value="254"></div>
+      <div class="m3-field">seq de la trama que llegó<input type="number" id="sNow" class="ctl" min="0" max="255" value="1"></div>
+      <button class="btn" data-sl="10" data-sn="11">sin pérdida</button>
+      <button class="btn" data-sl="10" data-sn="13">pierde 2</button>
+      <button class="btn" data-sl="254" data-sn="1">da la vuelta (255 y 0 perdidas)</button>
+      <button class="btn" data-sl="10" data-sn="10">mismo seq repetido</button>
+    </div>
+    <div class="info-box" id="seqOut"></div>
+
+    <!-- E. PARSER -->
+    <h3>E. El parser de Python paso a paso (<code>Receptor._procesar</code>)</h3>
+    <div class="what-am-i-seeing">El flujo del COM no tiene límites de mensaje: llegan trozos de cualquier tamaño. Esta demo usa un flujo con basura al principio, un falso sincronismo, una trama de texto cortada entre dos lecturas y una trama de audio <b>con una trama perdida antes</b> (seq 6 nunca llega). Es la misma lógica que el código real: buscar <code>AA 55</code>, validar tipo y n, esperar la trama completa y contar saltos de seq.</div>
+    <div class="m3-row">
+      <button class="btn btn-primary" id="pStep">Paso &#9654;</button>
+      <button class="btn" id="pAll">Ejecutar todo</button>
+      <button class="btn" id="pReset">Reiniciar</button>
+      <span class="mono" id="pStats" style="color:var(--text-muted)"></span>
+    </div>
+    <div class="info-box"><div class="mono" style="color:var(--text-dim)">bytearray del hilo lector:</div><div class="hex" id="pBuf" style="margin-top:4px"></div><div id="pMsg" style="margin-top:8px;color:var(--text)"></div></div>
+    <div class="log" id="pLog"></div>
+
+    <!-- F. LIMITES -->
+    <h3>F. Límites del formato (lo que conviene saber)</h3>
+    <div class="what-am-i-seeing warn"><ul>
+      <li><b>seq de 8 bits es ambiguo cada 256 tramas:</b> si se pierden exactamente 256 tramas seguidas (~0,67 s de audio) o un múltiplo, <code>perdidas</code> da 0.</li>
+      <li><b>Sin checksum:</b> una corrupción dentro del payload no se detecta (el USB ya la evita en el cable; si ocurriera en RAM, no habría aviso).</li>
+      <li><b><code>AA 55</code> puede aparecer dentro del audio</b> (son dos bytes de una muestra cualquiera). No molesta mientras el parser va leyendo trama por trama; solo importa al <i>resincronizar</i> tras una pérdida, y por eso se validan tipo y n.</li>
+      <li><b>Relleno en el bus I2S:</b> el slot es de 32 bits y la muestra de 24; los 8 bits de abajo no se usan y el firmware los descarta con <code>&gt;&gt; 8</code>.</li>
+      <li><b>Límites que impone Python:</b> audio <code>0 &lt; n &le; 4096</code> y texto <code>n &le; 64</code> (<code>MAX_FRAMES</code>, <code>MAX_TEXTO</code>). El firmware no limita el texto, pero sus mensajes son cortos.</li>
+      <li><b>Por qué 0xAA 0x55:</b> <i>(interpretación mía, no está documentado en el código)</i> es un patrón alternado de bits, elección habitual para sincronismo.</li>
+      <li><b>Cómo se corta en el cable:</b> un bloque USB de hasta 4096 B no respeta los límites de trama (2,65 tramas por bloque) y Python tampoco recibe "bloques": <code>ser.read()</code> devuelve lo que haya en el buffer del driver. Por eso el parser acumula en un <code>bytearray</code> y espera la trama completa.</li>
+    </ul></div>
+  </section>
+
+  <!-- ============================ MODULO 4 ============================ -->
+  <section class="module-card" id="mod4">
+    <div class="module-header">
+      <div class="module-title">
+        <span>4. El Puerto COM Virtual y USB CDC Explicados Desde Cero</span>
+        <span class="badge-tag badge-usb">CDC-ACM</span>
+      </div>
+      <div>
+        <span class="badge-tag badge-verified">CDC_Control_FS vacío</span>
+      </div>
+    </div>
+
+    <div class="what-am-i-seeing">
+      <strong>¿Qué estoy viendo?</strong> Por qué un puerto COM virtual no es una UART física: la pila de software de Windows, el apretón de manos de la enumeración al enchufar el cable, el control de flujo natural por NAK y una comparación UART real vs USB CDC, parámetro por parámetro.
+    </div>
+
+    <div class="interactive-tabs" id="mod4Tabs">
+      <button class="tab-btn active" data-tab="stack">1. Pila de Capas</button>
+      <button class="tab-btn" data-tab="enum">2. Enumeración (Enchufe)</button>
+      <button class="tab-btn" data-tab="nak">3. Endpoints &amp; NAK</button>
+      <button class="tab-btn" data-tab="uart_vs_cdc">4. UART Real vs CDC</button>
+      <button class="tab-btn" data-tab="bandwidth">5. Ancho de Banda &amp; Buffers</button>
+    </div>
+
+    <div id="mod4Content" style="background:var(--surface-2); padding:1.2rem; border-radius:8px; border:1px solid var(--border);"></div>
+  </section>
+
+  <!-- ============================ MODULO 5 ============================ -->
+  <section class="module-card" id="mod5">
+    <div class="module-header">
+      <div class="module-title">
+        <span>5. Camino Inverso: Un Comando de la PC al STM32</span>
+        <span class="badge-tag badge-fw">CDC_Receive_FS (EP1 OUT)</span>
+      </div>
+      <div>
+        <span class="badge-tag badge-verified">Código real</span>
+      </div>
+    </div>
+
+    <div class="what-am-i-seeing">
+      <strong>¿Qué estoy viendo?</strong> Cómo viaja un comando escrito con <code>ser.write(b"LFREQ:440\n")</code> hasta cambiar la frecuencia del DDS. Cada <strong>paso</strong> es un paquete USB OUT (máx. 64 B) que llama a <code>CDC_Receive_FS</code>. Elegí un escenario y avanzá paquete por paquete: vas a ver el buffer <code>usb_rx_buffer</code> (128 B), cuándo aparece el <code>\n</code> que dispara <code>parse_command</code>, qué pasa con comandos partidos, juntos o demasiado largos, y cómo el lazo principal recalcula la FTW <strong>después</strong> (no dentro de <code>parse_command</code>).
+    </div>
+
+    <div class="controls-bar">
+      <div class="slider-group">
+        <label for="m5Scenario">Escenario:</label>
+        <select id="m5Scenario" class="ctl" onchange="m5Load(this.value)"></select>
+      </div>
+      <button class="btn btn-primary" id="m5StepBtn" onclick="m5Step()">Paso &#9654; (siguiente paquete)</button>
+      <button class="btn" onclick="m5RunAll()">Ejecutar todo</button>
+      <button class="btn" onclick="m5Load(document.getElementById('m5Scenario').value)">&#8634; Reiniciar</button>
+    </div>
+
+    <div class="flow" id="m5Flow">
+      <div class="stage" id="m5s0">1. Python<br><code>ser.write()</code></div><span class="arrow">&rarr;</span>
+      <div class="stage" id="m5s1">2. Paquete OUT<br>EP1, &le; 64 B</div><span class="arrow">&rarr;</span>
+      <div class="stage" id="m5s2">3. <code>CDC_Receive_FS</code><br>(interrupción USB)</div><span class="arrow">&rarr;</span>
+      <div class="stage" id="m5s3">4. <code>parse_command</code><br>(misma interrupción)</div><span class="arrow">&rarr;</span>
+      <div class="stage" id="m5s4">5. Lazo principal<br>recalcula la FTW</div><span class="arrow">&rarr;</span>
+      <div class="stage" id="m5s5">6. Hardware<br>(DDS en el próximo <code>fill()</code>)</div>
+    </div>
+
+    <div class="box"><strong>Paquetes USB OUT del escenario</strong> (<span style="color:var(--warn-color)">&crarr;</span> = <code>\n</code>):
+      <div id="m5Packets" style="margin-top:6px"></div></div>
+
+    <div class="grid-2">
+      <div class="box">
+        <strong>Buffer <code>usb_rx_buffer[128]</code></strong> (índice <code>usb_rx_index</code> = <span id="m5Idx">0</span>)
+        <div class="mono" id="m5Buf" style="margin-top:6px; min-height:2.2em; word-break:break-all; color:var(--text)"></div>
+        <div class="hint" style="margin-top:6px; font-size:.78rem">Hasta que <code>CDC_Receive_FS</code> rearma el endpoint (<code>USBD_CDC_ReceivePacket</code>), el STM32 contesta NAK a los paquetes nuevos del host.</div>
+      </div>
+      <div class="box">
+        <strong>Variables globales y efecto</strong>
+        <div class="mono" id="m5Globals" style="margin-top:6px; line-height:1.7"></div>
+      </div>
+    </div>
+
+    <div class="box"><strong>Eventos de este paquete:</strong><div class="mono" id="m5Log" style="margin-top:6px; line-height:1.6"></div>
+      <div id="m5Resp" style="margin-top:8px"></div></div>
+
+    <div class="code-inspector">
+      <div class="code-panel">
+        <div class="code-panel-header">
+          <span>usbd_cdc_if.c &mdash; CDC_Receive_FS</span>
+          <span class="badge-tag badge-fw">Interrupción USB OTG_FS</span>
+        </div>
+        <div id="m5Code"></div>
+      </div>
+      <div class="code-panel">
+        <div class="code-panel-header">
+          <span>parse_command + main()</span>
+          <span class="badge-tag badge-fw" id="m5Ctx2">-</span>
+        </div>
+        <div id="m5Code2"></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============================ MODULO 6 ============================ -->
+  <section class="module-card" id="mod6">
+    <div class="module-header">
+      <div class="module-title">
+        <span>6. Línea de Tiempo de Interrupciones (NVIC)</span>
+        <span class="badge-tag badge-verified">Prioridad 0 sin anidamiento</span>
+      </div>
+      <div>
+        <span class="badge-tag badge-assumed">Duraciones de ISR: supuestos</span>
+      </div>
+    </div>
+
+    <div class="what-am-i-seeing">
+      <strong>¿Qué estoy viendo?</strong> Cuatro carriles en una escala de tiempo real: ISR del DMA (cada 2,62 ms), ISR del USB, SysTick y el lazo principal. Cuando una ISR corre, <strong>el lazo principal se detiene</strong> (muescas oscuras en su carril). Como DMA y USB comparten prioridad 0, si una llega mientras corre la otra queda <strong>pendiente</strong> (barra rayada) y arranca cuando termina. El OLED ocupa el lazo principal unos 92 ms cada 200 ms, pero eso no impide que el audio y el USB se atiendan.
+      <br><strong>Qué es real y qué es supuesto:</strong> los periodos (2,62 ms, 1 ms de SysTick, 20 ms de teclado, 200 ms de OLED), las prioridades y el bloqueo del OLED salen del código. <strong>Las duraciones de las ISR (DMA 0,35 ms, USB 0,04 ms) y los instantes de las ISR del USB (aquí, una por ms) son ilustrativos</strong>: no se midieron en tu placa.
+    </div>
+
+    <div class="controls-bar">
+      <button class="btn btn-primary" id="m6PlayBtn" onclick="toggleM6Play()">&#10074;&#10074; Pausa</button>
+      <button class="btn" onclick="resetM6()">&#8634; Reiniciar</button>
+      <div class="slider-group">
+        <label for="m6Win">Ventana visible:</label>
+        <input type="range" id="m6Win" min="10" max="400" step="10" value="120" oninput="updateM6()">
+        <span id="m6WinVal">120 ms</span>
+      </div>
+      <div class="slider-group">
+        <label for="m6Start">Posición:</label>
+        <input type="range" id="m6Start" min="0" max="1300" step="1" value="0" oninput="m6Scrub()">
+        <span id="m6StartVal">0 ms</span>
+      </div>
+    </div>
+
+    <div class="canvas-container" style="height: 320px;">
+      <canvas id="m6Canvas"></canvas>
+    </div>
+
+    <div class="grid-2" style="font-size:0.85rem; color:var(--text-muted);">
+      <div class="box">
+        <strong>Reglas del NVIC (Cortex-M4):</strong>
+        <ul style="margin-left:1.2rem; margin-top:4px;">
+          <li><strong>Misma prioridad (nivel 0):</strong> DMA y USB no se interrumpen. La que llega en medio queda <em>pendiente</em> y entra cuando termina la otra.</li>
+          <li><strong>SysTick (nivel 15):</strong> es la más baja; mientras corre una ISR de nivel 0 no puede ejecutarse.</li>
+          <li><strong>Plazo del callback del DMA:</strong> tiene hasta ~2,62 ms (menos el desfase entre streams) para terminar <code>fill()</code> + <code>stream_push_audio()</code>.</li>
+        </ul>
+      </div>
+      <div class="box">
+        <strong>Resultado de esta simulación (1,5 s):</strong>
+        <div id="m6Stats" class="mono" style="margin-top:6px; line-height:1.6"></div>
+        <strong style="display:block; margin-top:8px">Bloqueo del OLED (calculado, no medido):</strong>
+        <p style="margin-top:4px;">
+          <code>HAL_I2C_Mem_Write(..., buffer, 1024, HAL_MAX_DELAY)</code> a 100 kHz: unos 1026 bytes (1024 de framebuffer + dirección + byte de control) &times; 9 bits por byte (8 + ACK) = 9234 ciclos de reloj.<br>
+          9234 / 100 000 Hz &asymp; <strong>92,3 ms</strong>, cada 200 ms.
+        </p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============================ MODULO 7 ============================ -->
+  <section class="module-card" id="mod7">
+    <div class="module-header">
+      <div class="module-title">
+        <span>7. Glosario Técnico, Autoevaluación y Rigor</span>
+        <span class="badge-tag badge-usb">USB 2.0 Cap. 5 &amp; 9</span>
+      </div>
+      <div>
+        <span class="badge-tag badge-pc">Evaluación Interactiva</span>
+      </div>
+    </div>
+
+    <div class="what-am-i-seeing">
+      <strong>¿Qué estoy viendo?</strong> Un glosario tocable, 8 preguntas de autoevaluación con explicación y, al final, qué está verificado y qué es hipótesis.
+    </div>
+
+    <h4 style="color:var(--usb-color);">Glosario (hacé clic en un término):</h4>
+    <div style="display:flex; flex-wrap:wrap; gap:8px; margin-top:6px;" id="glossaryPills"></div>
+    <div id="glossaryDef" style="background:var(--surface-2); padding:12px; border-radius:6px; border:1px solid var(--border); font-size:0.9rem; color:var(--text-muted); min-height:50px;">
+      Seleccioná un término arriba para ver su definición.
+    </div>
+
+    <h4 style="color:var(--usb-color); margin-top:1.5rem;">Autoevaluación (8 preguntas):</h4>
+    <div id="quizContainer"></div>
+
+    <div style="background:var(--surface-2); border:1px solid var(--border); border-radius:8px; padding:1.2rem; margin-top:1.5rem;">
+      <h3 style="color:var(--warn-color); margin-bottom:8px;">Rigor: "Qué sabemos y qué no"</h3>
+      <div class="grid-2" style="font-size:0.86rem; color:var(--text-muted);">
+        <div>
+          <strong style="color:var(--fw-color);">&#10004; Verificado en el código del proyecto:</strong>
+          <ul style="margin-left:1.2rem; margin-top:4px;">
+            <li><code>CDC_Control_FS</code> tiene todos sus casos vacíos: el firmware ignora baudrate, paridad, stop bits y DTR/RTS.</li>
+            <li>Ring de 16&nbsp;384 B (~10 tramas, ~28 ms de audio); <code>tail</code> avanza solo en <code>stream_tx_done()</code>.</li>
+            <li>Formato de trama: <code>AA 55 | tipo | seq | n(2, little-endian) | payload</code>; audio 3 B por canal, texto ASCII.</li>
+            <li>DMA1 Stream3/4 y OTG_FS en prioridad 0; SysTick en 15.</li>
+            <li><code>parse_command</code> solo guarda variables; la FTW la recalcula el lazo principal con <code>FS = 97656.25</code>.</li>
+            <li><code>stream_push_text</code> ya tiene sección crítica (PRIMASK).</li>
+            <li>El USB no pierde datos en el cable (CRC16, ACK/NAK, reintentos): una trama "perdida" es un descarte por ring lleno.</li>
+          </ul>
+        </div>
+        <div>
+          <strong style="color:var(--warn-color);">&#9888; Supuestos e hipótesis no confirmadas:</strong>
+          <ul style="margin-left:1.2rem; margin-top:4px;">
+            <li><strong>Causa del ~10 % de pérdida:</strong> la hipótesis principal es que el hilo lector de Python se frena (GIL, redibujados de la GUI) más de ~28 ms. No está confirmado con el hardware. Contra eso, <code>stream_dropped</code> nunca se manda a la PC.</li>
+            <li><strong>Módulo 2:</strong> la lógica del ring es la real, pero duración/frecuencia de los congelamientos y el throughput efectivo del USB son parámetros ilustrativos. El escenario del botón (70 ms cada 500 ms) se eligió porque da una pérdida del orden de la observada; no es una medición.</li>
+            <li><strong>Módulo 6:</strong> las duraciones de ISR (DMA 0,35 ms, USB 0,04 ms, SysTick) y los instantes de las ISR del USB son estimaciones, no mediciones con osciloscopio.</li>
+            <li><strong><code>set_buffer_size(1 MB)</code>:</strong> no se verificó que <code>usbser.sys</code> lo respete.</li>
+            <li><strong>Pull-up de D+:</strong> en el STM32F4 es interno y se conecta por software; no verificado en tu placa.</li>
+            <li><strong>Reloj del I2S:</strong> el comentario de <code>main.c</code> dice 100 MHz / 1024, pero la configuración del MSP (PLLI2S M=16, N=192, R=2) da 150 MHz / 1536 según mi cálculo. El resultado (97&nbsp;656,25 Hz) es el mismo; conviene corregir el comentario.</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  </section>
+
+</main>
+
+<script>
+/* =========================================================================
+   LÓGICA PURA (sin DOM): se prueba aparte, fuera del navegador
+   ========================================================================= */
+// ==== PURE START
+const FS_HZ = 97656.25;
+const FRAME_PERIOD_MS = 256 / FS_HZ * 1000;      // 2,62144 ms entre callbacks del DMA
+const HDR = 6;
+const AUDIO_FRAME_BYTES = HDR + 256 * 6;         // 1542
+
+// ---------- Módulo 2: ring buffer de stream.c con host que se congela ----------
+// Modelo: el DMA produce una trama cada 2,62 ms (si no entra, se descarta entera);
+// el USB manda bloques de hasta 4096 B contiguos a 'usbKBps' (kB/s = bytes/ms) y SOLO avanza
+// mientras el host no está congelado; 'tail' sube recién al terminar (zero-copy).
+function createRingSim(cfg) {
+  const s = {
+    cfg: Object.assign({ ringSize: 16384, usbKBps: 1000, stallMs: 0, stallEveryMs: 500 }, cfg),
+    t: 0, head: 0, tail: 0, infl: 0, busy: false, left: 0,
+    dropped: 0, produced: 0, wraps: 0, maxOcc: 0, stalled: false,
+    nextFrame: FRAME_PERIOD_MS, lastHist: 0, histOcc: [], histStall: [], histDrop: [], dropAcc: 0, events: []
+  };
+  s.kick = function () {                                    // stream_kick()
+    const R = this.cfg.ringSize, avail = this.head - this.tail;
+    if (avail <= 0 || this.busy) return;
+    const idx = this.tail & (R - 1);
+    let len = R - idx;                                      // no cruzar el final del array
+    if (len < Math.min(avail, 4096)) this.wraps++;
+    if (len > avail) len = avail;
+    if (len > 4096) len = 4096;                             // MAX_CHUNK
+    this.busy = true; this.infl = len; this.left = len;
+    this.events.push('kick');
+  };
+  s.step = function (dt) {
+    const c = this.cfg;
+    this.t += dt;
+    this.stalled = c.stallMs > 0 && (this.t % c.stallEveryMs) < c.stallMs;
+    while (this.nextFrame <= this.t) {                      // callback del DMA: stream_push_audio
+      this.produced++;
+      if (c.ringSize - (this.head - this.tail) >= AUDIO_FRAME_BYTES) { this.head += AUDIO_FRAME_BYTES; this.events.push('push'); }
+      else { this.dropped++; this.dropAcc++; this.events.push('drop'); }    // begin_frame: descarte total + seq++
+      this.nextFrame += FRAME_PERIOD_MS;
+      this.kick();
+    }
+    if (this.busy && !this.stalled) {
+      this.left -= c.usbKBps * dt;
+      if (this.left <= 0) {                                 // stream_tx_done
+        this.tail += this.infl; this.infl = 0; this.busy = false;
+        this.events.push('done');
+        this.kick();
+      }
+    }
+    const occ = this.head - this.tail;
+    if (occ > this.maxOcc) this.maxOcc = occ;
+    while (this.t - this.lastHist >= 1) {
+      this.lastHist += 1;
+      this.histOcc.push(occ / c.ringSize); this.histStall.push(this.stalled ? 1 : 0); this.histDrop.push(this.dropAcc > 0 ? 1 : 0); this.dropAcc = 0;
+      if (this.histOcc.length > 3000) { this.histOcc.shift(); this.histStall.shift(); this.histDrop.shift(); }
+    }
+    if (this.events.length > 200) this.events.splice(0, this.events.length - 200);
+  };
+  return s;
+}
+
+// ---------- Módulo 3: codificación de tramas ----------
+const hex2 = b => (b & 0xFF).toString(16).toUpperCase().padStart(2, '0');
+const hexN = (v, d) => (v >>> 0).toString(16).toUpperCase().padStart(d, '0');
+const grp8 = (v, bits) => (v >>> 0).toString(2).padStart(bits, '0').match(/.{1,8}/g).join(' ');
+
+// Recorrido de una muestra: ADC -> slot I2S -> 2 halfwords -> firmware -> 3 bytes -> Python
+function encodeSampleSteps(v) {
+  v = Math.max(-8388608, Math.min(8388607, Math.trunc(v)));
+  const u24 = v & 0xFFFFFF;                    // complemento a 2 en 24 bits
+  const word32 = (u24 << 8) >>> 0;             // alineada a la izquierda en el slot de 32 bits
+  const hi = word32 >>> 16, lo = word32 & 0xFFFF;   // f[0], f[1] en rx_buf (halfwords)
+  const joined = ((hi << 16) | lo) | 0;        // (int32_t)(((uint32_t)f[0] << 16) | f[1])
+  const l = joined >> 8;                       // desplazamiento aritmético: extiende el signo
+  const b0 = l & 0xFF, b1 = (l >> 8) & 0xFF, b2 = (l >> 16) & 0xFF;   // (uint8_t)l, l>>8, l>>16
+  const raw = b0 | (b1 << 8) | (b2 << 16);     // Python: a[:,0] | (a[:,1]<<8) | (a[:,2]<<16)
+  const dec = (raw ^ 0x800000) - 0x800000;     // Python: (l ^ 0x800000) - 0x800000
+  return { v, u24, word32, hi, lo, joined, l, b0, b1, b2, raw, dec, norm: dec / 8388608 };
+}
+
+function lostFrames(last, now) { return (now - last - 1) & 0xFF; }
+
+const ascii = s => [...s].map(c => { const k = c.charCodeAt(0); return k < 128 ? k : 63; });
+
+function frameBytes(tipo, seq, payload, n) {
+  return [0xAA, 0x55, tipo, seq & 0xFF, n & 0xFF, (n >> 8) & 0xFF, ...payload];
+}
+
+// Misma lógica que Receptor._procesar; registra cada decisión
+function runParser(chunks) {
+  const log = []; let buf = [], ultimo = null, perdidas = 0, tramas = 0;
+  const snap = (msg, kind) => log.push({ buf: buf.slice(), msg, kind, perdidas, tramas });
+  chunks.forEach((ch, ci) => {
+    buf.push(...ch);
+    snap(`Lectura ${ci + 1}: llegan ${ch.length} bytes del COM y se agregan al bytearray.`, 'chunk');
+    for (;;) {
+      let i = -1;
+      for (let k = 0; k + 1 < buf.length; k++) if (buf[k] === 0xAA && buf[k + 1] === 0x55) { i = k; break; }
+      if (i < 0) {
+        const d = Math.max(buf.length - 1, 0);
+        if (d > 0) { buf.splice(0, d); snap(`No hay AA 55: se descartan ${d} bytes y se conserva el último por si es el 0xAA de un encabezado partido.`, 'drop'); }
+        else snap('No hay AA 55 todavía: se espera la próxima lectura.', 'wait');
+        break;
+      }
+      if (i > 0) { buf.splice(0, i); snap(`Se descartan ${i} bytes de basura antes del sincronismo AA 55.`, 'drop'); }
+      if (buf.length < HDR) { snap('Hay AA 55 pero faltan bytes para el encabezado de 6: se espera.', 'wait'); break; }
+      const tipo = buf[2], seq = buf[3], n = buf[4] | (buf[5] << 8);
+      let largo;
+      if (tipo === 1 && n > 0 && n <= 4096) largo = n * 6;
+      else if (tipo === 2 && n <= 64) largo = n;
+      else {
+        buf.splice(0, 1);
+        snap(`Falso sincronismo: tipo=0x${hex2(tipo)} n=${n} no es válido. Se descarta 1 byte y se sigue buscando.`, 'false');
+        continue;
+      }
+      if (buf.length < HDR + largo) { snap(`Encabezado válido (tipo=0x${hex2(tipo)}, seq=${seq}, n=${n}) pero faltan ${HDR + largo - buf.length} de ${largo} bytes de payload: se espera la próxima lectura.`, 'wait'); break; }
+      const payload = buf.slice(HDR, HDR + largo);
+      buf.splice(0, HDR + largo);
+      let extra = '';
+      if (ultimo !== null) { const p = lostFrames(ultimo, seq); perdidas += p; extra = p ? ` ¡Salto de seq: último=${ultimo}, llegó ${seq} → ${p} trama(s) perdida(s)!` : ` seq continuo (${ultimo} → ${seq}).`; }
+      else extra = ' Primera trama: todavía no hay referencia de seq.';
+      ultimo = seq; tramas++;
+      if (tipo === 2) snap(`Trama de TEXTO completa: "${String.fromCharCode(...payload)}".${extra}`, 'frame');
+      else {
+        const L = ((payload[0] | (payload[1] << 8) | (payload[2] << 16)) ^ 0x800000) - 0x800000;
+        const R = ((payload[3] | (payload[4] << 8) | (payload[5] << 16)) ^ 0x800000) - 0x800000;
+        snap(`Trama de AUDIO completa (${n} frames). Primer frame: L=${L} (${(L / 8388608).toFixed(4)}), R=${R} (${(R / 8388608).toFixed(4)}).${extra}`, 'frame');
+      }
+    }
+  });
+  return log;
+}
+
+function demoStream() {
+  const garbage = [0x13, 0x77, 0xAA, 0x55, 0x07, 0x09, 0xFF, 0xFF];
+  const f1 = frameBytes(2, 5, ascii('PONG'), 4);
+  const audio = frameBytes(1, 7, [0x12, 0x34, 0x56, 0xFE, 0xDC, 0xBA, 0x00, 0x00, 0x40, 0x00, 0x00, 0xC0], 2);
+  const f3 = frameBytes(2, 8, ascii('OK'), 2);
+  const all = [...garbage, ...f1, ...audio, ...f3];
+  const sizes = [9, 6, 13, 8, 11, 7, 12], chunks = []; let p = 0, k = 0;
+  while (p < all.length) { const sz = sizes[k++ % sizes.length]; chunks.push(all.slice(p, p + sz)); p += sz; }
+  return chunks;
+}
+
+// ---------- Módulo 5: CDC_Receive_FS + parse_command ----------
+function chunk64(s) { const o = []; for (let i = 0; i < s.length; i += 64) o.push(s.slice(i, i + 64)); return o; }
+const M5_SCENARIOS = {
+  normal:   { label: 'Comando estándar: "LFREQ:440\\n"', packets: ['LFREQ:440\n'] },
+  split:    { label: 'Comando partido en 2 paquetes: "LFREQ:" + "440\\n"', packets: ['LFREQ:', '440\n'] },
+  multi:    { label: 'Dos comandos en un paquete: "LOFF\\nROFF\\n"', packets: ['LOFF\nROFF\n'] },
+  overflow: { label: 'Línea de 130 caracteres sin "\\n" (desborda el buffer de 128) y luego "LOFF\\n"', packets: chunk64('A'.repeat(130) + '\n' + 'LOFF\n') },
+  ping:     { label: 'Consulta con respuesta: "PING\\n" → "PONG"', packets: ['PING\n'] }
+};
+
+function parseCommand(cmd, g, nextSeq) {
+  if (cmd.startsWith('LFREQ:')) { g.freq[0] = parseFloat(cmd.slice(6)) || 0; return { kind: 'freq', text: `frecuencia[LEFT] = ${g.freq[0]}` }; }
+  if (cmd.startsWith('RFREQ:')) { g.freq[1] = parseFloat(cmd.slice(6)) || 0; return { kind: 'freq', text: `frecuencia[RIGHT] = ${g.freq[1]}` }; }
+  if (cmd === 'LON')  { g.on[0] = 1; return { kind: 'onoff', text: 'salida_activa[LEFT] = 1' }; }
+  if (cmd === 'RON')  { g.on[1] = 1; return { kind: 'onoff', text: 'salida_activa[RIGHT] = 1' }; }
+  if (cmd === 'LOFF') { g.on[0] = 0; return { kind: 'onoff', text: 'salida_activa[LEFT] = 0' }; }
+  if (cmd === 'ROFF') { g.on[1] = 0; return { kind: 'onoff', text: 'salida_activa[RIGHT] = 0' }; }
+  if (cmd === 'STREAM:1') { g.stream = 1; return { kind: 'stream', text: 'stream_on = 1' }; }
+  if (cmd === 'STREAM:0') { g.stream = 0; return { kind: 'stream', text: 'stream_on = 0' }; }
+  if (cmd === 'PING') { return { kind: 'ping', text: 'stream_push_text("PONG")', resp: frameBytes(2, nextSeq(), ascii('PONG'), 4) }; }
+  return { kind: 'unknown', text: 'no coincide con ningún comando: no hace nada (el firmware lo ignora en silencio)' };
+}
+
+function simulateRx(packets) {
+  const BUF = 128;                               // USB_RX_BUFFER_SIZE
+  let buf = []; let seq = 17;
+  const g = { freq: [1000, 1000], on: [1, 1], stream: 0 };
+  const steps = [];
+  packets.forEach((p, pi) => {
+    const events = []; let resp = null;
+    for (const ch of p) {
+      const c = ch.charCodeAt(0);
+      if (c === 10) {
+        const cmd = String.fromCharCode(...buf);
+        const r = parseCommand(cmd, g, () => seq++);
+        if (r.resp) resp = r.resp;
+        events.push({ t: 'cmd', cmd, kind: r.kind, text: r.text });
+        buf = [];
+      } else if (buf.length < BUF - 1) {
+        buf.push(c);
+        const last = events[events.length - 1];
+        if (last && last.t === 'acc') last.n++; else events.push({ t: 'acc', n: 1 });
+      } else {
+        events.push({ t: 'overflow', lost: buf.length });
+        buf = [];
+      }
+    }
+    steps.push({ pi, packet: p, events, buf: String.fromCharCode(...buf), idx: buf.length, g: JSON.parse(JSON.stringify(g)), resp });
+  });
+  return steps;
+}
+const ftwOf = f => Math.floor(f * 4294967296.0 / FS_HZ);   // (uint32_t)(frecuencia * 4294967296.0 / FS)
+
+// ---------- Módulo 6: planificación de interrupciones ----------
+// Prioridad 0 (DMA y USB): mismo nivel -> no se interrumpen; el que llega en medio queda PENDIENTE.
+function scheduleIsr(reqs) {
+  const arr = reqs.slice().sort((a, b) => a.req - b.req || (a.lane < b.lane ? -1 : 1));
+  let busy = 0;
+  return arr.map(r => { const start = Math.max(r.req, busy); busy = start + r.dur; return Object.assign({}, r, { start, end: busy }); });
+}
+// SysTick (prioridad 15): no puede ejecutarse mientras corre una ISR de prioridad 0
+function delayTicks(times, intervals, dur) {
+  let idx = 0;
+  return times.map(t => {
+    let s = t;
+    for (;;) {
+      while (idx < intervals.length && intervals[idx][1] <= s) idx++;
+      if (idx < intervals.length && intervals[idx][0] <= s) s = intervals[idx][1]; else break;
+    }
+    return { req: t, start: s, end: s + dur };
+  });
+}
+// Lazo principal: teclado cada 20 ms y OLED cada 200 ms (I2C bloqueante ~92 ms), como en main.c
+const OLED_MS = 1026 * 9 / 100;                  // bytes x 9 bits / 100 kHz = 92,3 ms (calculado, no medido)
+const KEYPAD_MS = 0.1;                           // supuesto
+function mainSchedule(tEnd) {
+  const out = []; let free = 0, lastKey = 0, lastOled = 0;
+  for (;;) {
+    const dueK = lastKey + 20, dueO = lastOled + 200;
+    const isK = dueK <= dueO, due = isK ? dueK : dueO;
+    const start = Math.max(due, free);
+    if (start > tEnd) break;
+    const dur = isK ? KEYPAD_MS : OLED_MS;
+    out.push({ kind: isK ? 'keypad' : 'oled', start, end: start + dur });
+    if (isK) lastKey = start; else lastOled = start;
+    free = start + dur;
+  }
+  return out;
+}
+const DMA_ISR_MS = 0.35, USB_ISR_MS = 0.04, TICK_MS = 0.003;   // SUPUESTOS (estimaciones, no mediciones)
+function buildTimeline(tEnd) {
+  const reqs = [];
+  for (let k = 0; k * FRAME_PERIOD_MS <= tEnd; k++) reqs.push({ lane: 'dma', req: k * FRAME_PERIOD_MS, dur: DMA_ISR_MS });
+  for (let j = 0; 0.2 + j <= tEnd; j++) reqs.push({ lane: 'usb', req: 0.2 + j, dur: USB_ISR_MS });
+  const isr = scheduleIsr(reqs);
+  const intervals = isr.map(r => [r.start, r.end]);
+  const ticks = delayTicks(Array.from({ length: Math.floor(tEnd) + 1 }, (_, i) => i), intervals, TICK_MS);
+  const usb = isr.filter(r => r.lane === 'usb');
+  let maxDelay = 0, delayed = 0;
+  usb.forEach(r => { const d = r.start - r.req; if (d > 1e-9) delayed++; if (d > maxDelay) maxDelay = d; });
+  return { dma: isr.filter(r => r.lane === 'dma'), usb, ticks, main: mainSchedule(tEnd), isrIntervals: intervals, maxUsbDelay: maxDelay, delayedUsb: delayed, totalUsb: usb.length };
+}
+// ==== PURE END
+
+/* =========================================================================
+   UTILIDADES COMPARTIDAS
+   ========================================================================= */
+const $ = id => document.getElementById(id);
+const esc = s => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+const isLight = () => document.body.classList.contains('light');
+const C = { fw: '#10b981', usb: '#0284c7', pc: '#8b5cf6', warn: '#f59e0b', danger: '#ef4444' };
+const txtCol = () => (isLight() ? '#0f172a' : '#f1f5f9');
+const dimCol = () => (isLight() ? '#64748b' : '#94a3b8');
+const gridCol = () => (isLight() ? '#cbd5e1' : '#1e293b');
+const panelCol = () => (isLight() ? '#e2e8f0' : '#131d31');
+
+function toggleTheme() {
+  document.body.classList.toggle('light');
+  const l = isLight();
+  $('themeLabel').textContent = l ? 'Modo Oscuro' : 'Modo Claro';
+  $('themeIcon').innerHTML = l ? '&#9788;' : '&#9790;';
+}
+
+function resizeCanvas(canvas) {
+  const r = canvas.getBoundingClientRect();
+  const w = Math.max(Math.floor(r.width), 10), h = Math.max(Math.floor(r.height), 10);
+  if (canvas.width !== w || canvas.height !== h) { canvas.width = w; canvas.height = h; }
+}
+
+// Dibuja un panel de código; las líneas que empiezan con // o # se atenúan; 'active' = índices resaltados
+function renderCode(id, lines, active) {
+  $(id).innerHTML = lines.map((l, i) =>
+    `<div class="code-line${active.indexOf(i) >= 0 ? ' active' : ''}${/^\s*(\/\/|#)/.test(l) ? ' cmt' : ''}">${esc(l)}</div>`).join('');
+}
+
+/* =========================================================================
+   MODULO 1: MAPA COMPLETO DEL VIAJE DE UN DATO
+   ========================================================================= */
+const M1_FW = [
+  '// main.c (arranque, una sola vez)',
+  'HAL_I2SEx_TransmitReceive_DMA(&hi2s2, audio_buf, rx_buf, I2S_SIZE);',
+  '// el DMA circular llena rx_buf; cada 256 frames (2,62 ms) llama a:',
+  'void HAL_I2SEx_TxRxHalfCpltCallback(I2S_HandleTypeDef *hi2s) {',
+  '    fill(&audio_buf[0]);                         // DAC',
+  '    stream_push_audio(&rx_buf[0], FRAMES_HALF);  // ADC: 256 frames',
+  '}',
+  '// stream.c (abreviado)',
+  'if (begin_frame(STREAM_TYPE_AUDIO, frames, frames * 6u)) {   // 1542 B',
+  '    /* por cada frame: ring_put x6  (L0 L1 L2 R0 R1 R2) */',
+  '}',
+  'stream_kick();   // si el USB está libre: CDC_Transmit_FS(&ring[idx], len)',
+  '// al terminar: CDC_TransmitCplt_FS() -> stream_tx_done() -> stream_kick()'
+];
+const M1_PC = [
+  '# visor_adc.py: Receptor._loop (hilo lector)',
+  'datos = self.ser.read(self.ser.in_waiting or 1)',
+  'self.buf.extend(datos)',
+  'self._procesar()',
+  '# _procesar: marca, encabezado, trama completa',
+  'i = buf.find(SYNC)            # SYNC = b"\\xAA\\x55"',
+  'tipo = buf[2]; seq = buf[3]; n = buf[4] | (buf[5] << 8)',
+  'if len(buf) < HDR + largo: return    # falta llegar el resto',
+  'self.perdidas += (seq - self.ultimo_seq - 1) & 0xFF',
+  '# _guardar_audio: 3 bytes -> entero de 24 bits con signo',
+  'l = a[:, 0] | (a[:, 1] << 8) | (a[:, 2] << 16)',
+  'l = ((l ^ 0x800000) - 0x800000) / FULL_SCALE'
+];
+
+const m1Nodes = [
+  { title: '1. ADC', sub: 'PCM3060 (I2S)', layer: 'fw', fw: [], pc: [], ctxFw: 'Hardware (sin código del STM32)', ctxPc: '-',
+    desc: 'El modulador sigma-delta del PCM3060 entrega una muestra de 24 bits por canal cada 10,24 µs (Fs = 97 656,25 Hz). Esto es hardware del códec: no hay código del STM32 en este paso.' },
+  { title: '2. Bus I2S2 + DMA', sub: 'rx_buf (2048 halfwords)', layer: 'fw', fw: [1, 2], pc: [], ctxFw: 'Arranque + hardware DMA', ctxPc: '-',
+    desc: 'El I2S2 (maestro, full duplex) recibe cada muestra en un slot de 32 bits. El DMA1 Stream3, en modo circular, copia cada halfword de 16 bits a rx_buf sin intervención de la CPU. 4 halfwords = 1 frame estéreo.' },
+  { title: '3. Callback del DMA', sub: '256 frames cada 2,62 ms', layer: 'fw', fw: [3, 4, 5, 6], pc: [], ctxFw: 'ISR DMA1 Stream3 (NVIC 0)', ctxPc: '-',
+    desc: 'Al llenarse una mitad de rx_buf (HTIF/TCIF) el DMA levanta su interrupción y la HAL llama a este callback. Hace dos cosas: rellena la mitad libre del buffer del DAC y entrega las 256 muestras recién capturadas a stream_push_audio().' },
+  { title: '4. Ring buffer', sub: '16 384 B (~10 tramas)', layer: 'fw', fw: [7, 8, 9, 10], pc: [], ctxFw: 'ISR DMA1 Stream3 (NVIC 0)', ctxPc: '-',
+    desc: 'stream_push_audio() reserva la trama entera (6 B de encabezado + 256 × 6 B = 1542 B) o la descarta completa si no entra. Cada muestra de 24 bits se escribe como 3 bytes, el menos significativo primero.' },
+  { title: '5. stream_kick()', sub: 'CDC_Transmit_FS', layer: 'fw', fw: [11, 12], pc: [], ctxFw: 'ISR DMA / ISR USB (NVIC 0)', ctxPc: '-',
+    desc: 'Si el USB está libre, entrega al periférico un puntero directo al ring (zero-copy) con hasta 4096 B contiguos. Cuando el host confirma, la interrupción USB llama a stream_tx_done(), que avanza tail y encadena el próximo bloque.' },
+  { title: '6. Cable USB', sub: 'paquetes bulk de 64 B', layer: 'usb', fw: [], pc: [], ctxFw: 'Hardware OTG_FS', ctxPc: '-',
+    desc: 'En Full Speed el host decide cuándo pide datos (token IN al endpoint 0x81). Cada paquete lleva hasta 64 B con CRC16; si el STM32 no tiene datos listos responde NAK. Hasta 19 paquetes de 64 B por frame de 1 ms.' },
+  { title: '7. Driver del host', sub: 'usbser.sys / COMn', layer: 'pc', fw: [], pc: [], ctxFw: '-', ctxPc: 'Kernel de Windows',
+    desc: 'usbser.sys reensambla los paquetes en un flujo de bytes y lo deja en su buffer de recepción. Para la aplicación es un puerto COM; los límites entre paquetes o transferencias USB desaparecen.' },
+  { title: '8. pyserial', sub: 'ser.read(in_waiting)', layer: 'pc', fw: [], pc: [0, 1, 2, 3], ctxFw: '-', ctxPc: 'Hilo lector (Python)',
+    desc: 'Un hilo de Python lee lo que haya disponible y lo agrega a un bytearray. Si este hilo no corre durante ~28 ms (por ejemplo, la GUI redibujando y reteniendo el GIL), el ring del STM32 se llena y empiezan los descartes.' },
+  { title: '9. Parser + gráfico', sub: 'sync AA 55, seq, NumPy', layer: 'pc', fw: [], pc: [4, 5, 6, 7, 8, 9, 10, 11], ctxFw: '-', ctxPc: 'Hilo lector (Python)',
+    desc: 'Busca la marca AA 55, valida tipo y n, espera la trama completa, cuenta pérdidas con seq y convierte los 3 bytes de cada canal a un entero de 24 bits con signo normalizado a ±1, que va al ring de NumPy y al gráfico.' }
+];
+
+const m1Canvas = $('m1Canvas');
+const m1Ctx = m1Canvas.getContext('2d');
+let m1Running = true, m1Speed = 1.0, m1Progress = 0, m1Sel = 0;
+
+function layerColor(layer) { return layer === 'usb' ? C.usb : layer === 'pc' ? C.pc : C.fw; }
+
+function drawM1() {
+  resizeCanvas(m1Canvas);
+  const w = m1Canvas.width, h = m1Canvas.height;
+  m1Ctx.clearRect(0, 0, w, h);
+
+  const padX = 50;
+  const stepX = (w - padX * 2) / (m1Nodes.length - 1);
+  const cy = h / 2;
+
+  m1Ctx.beginPath();
+  m1Ctx.strokeStyle = gridCol();
+  m1Ctx.lineWidth = 4;
+  m1Ctx.moveTo(padX, cy);
+  m1Ctx.lineTo(w - padX, cy);
+  m1Ctx.stroke();
+
+  if (m1Running) {
+    m1Progress += 0.008 * m1Speed;
+    if (m1Progress >= m1Nodes.length - 1) m1Progress = 0;
+    const near = Math.round(m1Progress);
+    if (near !== m1Sel) { m1Sel = near; updateM1Detail(); }
+  }
+
+  const px = padX + m1Progress * stepX;
+  m1Ctx.beginPath();
+  m1Ctx.arc(px, cy, 8, 0, Math.PI * 2);
+  m1Ctx.fillStyle = C.warn;
+  m1Ctx.shadowColor = C.warn;
+  m1Ctx.shadowBlur = 10;
+  m1Ctx.fill();
+  m1Ctx.shadowBlur = 0;
+
+  m1Nodes.forEach((node, i) => {
+    const x = padX + i * stepX;
+    const sel = m1Sel === i;
+    const color = layerColor(node.layer);
+    m1Ctx.beginPath();
+    m1Ctx.arc(x, cy, sel ? 16 : 12, 0, Math.PI * 2);
+    m1Ctx.fillStyle = m1Progress >= i - 0.01 ? color : panelCol();
+    m1Ctx.strokeStyle = color;
+    m1Ctx.lineWidth = sel ? 4 : 2;
+    m1Ctx.fill();
+    m1Ctx.stroke();
+
+    m1Ctx.fillStyle = txtCol();
+    m1Ctx.font = 'bold 11px system-ui';
+    m1Ctx.textAlign = 'center';
+    const up = i % 2 === 0;
+    m1Ctx.fillText(node.title, x, up ? cy - 30 : cy + 38);
+    m1Ctx.font = '10px system-ui';
+    m1Ctx.fillStyle = dimCol();
+    m1Ctx.fillText(node.sub, x, up ? cy - 44 : cy + 52);
+  });
+
+  requestAnimationFrame(drawM1);
+}
+
+m1Canvas.addEventListener('click', e => {
+  const rect = m1Canvas.getBoundingClientRect();
+  const x = e.clientX - rect.left;
+  const padX = 50, stepX = (m1Canvas.width - padX * 2) / (m1Nodes.length - 1);
+  m1Nodes.forEach((node, i) => {
+    if (Math.abs(x - (padX + i * stepX)) < 28) {
+      m1Sel = i; m1Progress = i; m1Running = false;
+      $('m1PlayBtn').innerHTML = '&#9654; Play';
+      updateM1Detail();
+    }
+  });
+});
+
+function updateM1Detail() {
+  const n = m1Nodes[m1Sel];
+  $('m1NodeDetail').innerHTML = `<strong>${esc(n.title)}</strong> [capa: ${n.layer === 'fw' ? 'firmware' : n.layer === 'usb' ? 'USB' : 'PC'}]<br>${esc(n.desc)}`;
+  renderCode('m1FwCode', M1_FW, n.fw);
+  renderCode('m1PcCode', M1_PC, n.pc);
+  $('m1FwContext').textContent = n.ctxFw;
+  $('m1PcContext').textContent = n.ctxPc;
+}
+
+function toggleM1Play() {
+  m1Running = !m1Running;
+  $('m1PlayBtn').innerHTML = m1Running ? '&#10074;&#10074; Pausa' : '&#9654; Play';
+}
+function stepM1() {
+  m1Running = false;
+  $('m1PlayBtn').innerHTML = '&#9654; Play';
+  m1Progress = (Math.round(m1Progress) + 1) % m1Nodes.length;
+  m1Sel = Math.round(m1Progress);
+  updateM1Detail();
+}
+function resetM1() {
+  m1Progress = 0; m1Sel = 0; m1Running = true;
+  $('m1PlayBtn').innerHTML = '&#10074;&#10074; Pausa';
+  updateM1Detail();
+}
+function updateM1Speed(val) {
+  m1Speed = parseFloat(val);
+  $('m1SpeedVal').textContent = parseFloat(val).toFixed(1) + 'x';
+}
+
+/* =========================================================================
+   MODULO 2: SIMULADOR DEL RING BUFFER (usa createRingSim, lógica pura arriba)
+   ========================================================================= */
+const M2_CODE = [
+  'static int begin_frame(uint8_t type, uint16_t n, uint32_t payload_bytes) {',
+  '    if (ring_free() < STREAM_HDR_SIZE + payload_bytes) {   // ¿entra la trama entera?',
+  '        stream_dropped++; seq++; return 0;                 // descarte total',
+  '    }',
+  '// stream_kick()  (la llaman el callback del DMA y stream_tx_done)',
+  '    len = RING_SIZE - idx; if (len > avail) len = avail; if (len > MAX_CHUNK) len = MAX_CHUNK;',
+  '    CDC_Transmit_FS(&ring[idx], len); usb_busy = 1; inflight = len;',
+  '// stream_tx_done()  (interrupción USB: el host confirmó)',
+  '    tail += inflight; inflight = 0; usb_busy = 0; stream_kick();'
+];
+const M2_ACTIVE = { push: [1, 3], drop: [1, 2], kick: [5, 6], done: [8] };
+const M2_LABEL = { push: 'stream_push_audio: entra', drop: 'begin_frame: DESCARTE', kick: 'stream_kick()', done: 'stream_tx_done()' };
+
+const m2Canvas = $('m2Canvas');
+const m2Ctx = m2Canvas.getContext('2d');
+let m2 = null, m2Running = true, m2Flash = {}, m2LastEvent = '', m2LastKey = '', m2Last = performance.now();
+
+function m2ReadCfg() {
+  return { ringSize: +$('m2RingSize').value, usbKBps: +$('m2Usb').value, stallMs: +$('m2HostPause').value, stallEveryMs: +$('m2Every').value };
+}
+function resetM2() {
+  m2 = createRingSim(m2ReadCfg());
+  m2Flash = {}; m2LastEvent = '';
+  updateM2Cfg();
+}
+function updateM2Cfg() {
+  $('m2HostPauseVal').textContent = $('m2HostPause').value + ' ms';
+  $('m2EveryVal').textContent = $('m2Every').value + ' ms';
+  $('m2UsbVal').textContent = $('m2Usb').value + ' kB/s';
+  $('m2SpeedVal').textContent = parseFloat($('m2Speed').value).toFixed(1) + 'x';
+  if (m2) {
+    const c = m2ReadCfg();
+    m2.cfg.usbKBps = c.usbKBps; m2.cfg.stallMs = c.stallMs; m2.cfg.stallEveryMs = c.stallEveryMs;
+  }
+  updateM2Aguante();
+  updateM2Stats();
+}
+function changeRingSize() { resetM2(); }
+function setM2(ring, stall, every, usb) {
+  $('m2RingSize').value = String(ring); $('m2HostPause').value = String(stall);
+  $('m2Every').value = String(every); $('m2Usb').value = String(usb);
+  m2Running = true; $('m2PlayBtn').innerHTML = '&#10074;&#10074; Pausa';
+  resetM2();
+}
+function escenarioIlustrativo() { setM2(16384, 70, 500, 1000); }
+function escenarioRing64() { setM2(65536, 70, 500, 1000); }
+
+function updateM2Aguante() {
+  const R = +$('m2RingSize').value, st = +$('m2HostPause').value, usb = +$('m2Usb').value;
+  let t = `<strong>Margen del ring:</strong> con ${R} B y un flujo de ${(AUDIO_FRAME_BYTES / FRAME_PERIOD_MS).toFixed(1)} B/ms (588 kB/s), el ring aguanta unos <strong>${(R / (AUDIO_FRAME_BYTES / FRAME_PERIOD_MS)).toFixed(0)} ms</strong> con el host congelado (menos lo que ya tenga adentro y el bloque en vuelo, hasta 4096 B ≈ 7 ms).`;
+  if (st > 0) {
+    const need = st * AUDIO_FRAME_BYTES / FRAME_PERIOD_MS;
+    t += ` Para absorber un congelamiento de ${st} ms hacen falta ≈ ${Math.round(need)} B libres: ${need < R * 0.85 ? '<span class="okc">alcanza</span>' : '<span class="badc">no alcanza, habrá descartes</span>'}.`;
+  }
+  if (usb < AUDIO_FRAME_BYTES / FRAME_PERIOD_MS) t += ' <span class="badc">El throughput del USB es menor que el flujo de audio (588 kB/s): el ring se llena siempre, aunque el host no se congele.</span>';
+  $('m2Aguante').innerHTML = t;
+}
+
+function updateM2Stats() {
+  if (!m2) return;
+  const R = m2.cfg.ringSize, mask = R - 1;
+  $('m2HeadVal').textContent = m2.head;
+  $('m2HeadIdx').textContent = m2.head & mask;
+  $('m2TailVal').textContent = m2.tail;
+  $('m2TailIdx').textContent = m2.tail & mask;
+  $('m2InflightVal').textContent = m2.infl + ' B';
+  $('m2FreeVal').textContent = (R - (m2.head - m2.tail)) + ' B';
+  $('m2DropVal').textContent = m2.dropped;
+  $('m2WrapVal').textContent = m2.wraps;
+  const pct = m2.produced > 0 ? (100 * m2.dropped / m2.produced).toFixed(1) : '0.0';
+  const b = $('m2DropBadge');
+  b.textContent = `Tramas perdidas: ${m2.dropped} de ${m2.produced} (${pct}%)`;
+  b.className = m2.dropped > 0 ? 'badge-tag badge-loss' : 'badge-tag badge-fw';
+}
+
+function toggleM2Play() {
+  m2Running = !m2Running;
+  $('m2PlayBtn').innerHTML = m2Running ? '&#10074;&#10074; Pausa' : '&#9654; Play';
+}
+function advanceM2(simMs) {
+  const STEP = 0.25;
+  const n = Math.min(Math.ceil(simMs / STEP), 1200);
+  for (let i = 0; i < n; i++) m2.step(STEP);
+}
+function stepM2() {
+  m2Running = false; $('m2PlayBtn').innerHTML = '&#9654; Play';
+  advanceM2(10);
+}
+
+function drawM2() {
+  const now = performance.now();
+  const dt = Math.min(now - m2Last, 50);
+  m2Last = now;
+  if (m2Running) advanceM2(dt * parseFloat($('m2Speed').value));
+
+  // eventos recientes -> resaltado de código
+  while (m2.events.length) { const ev = m2.events.shift(); m2Flash[ev] = now + 350; m2LastEvent = ev; }
+  const act = [];
+  Object.keys(m2Flash).forEach(k => { if (m2Flash[k] > now) (M2_ACTIVE[k] || []).forEach(i => { if (act.indexOf(i) < 0) act.push(i); }); });
+  const key = act.join(',') + '|' + m2LastEvent;
+  if (key !== m2LastKey) {
+    m2LastKey = key;
+    renderCode('m2CodeBlock', M2_CODE, act);
+    const lb = $('m2BranchBadge');
+    lb.textContent = m2LastEvent ? M2_LABEL[m2LastEvent] : '-';
+    lb.className = 'badge-tag ' + (m2LastEvent === 'drop' ? 'badge-loss' : 'badge-fw');
+  }
+  updateM2Stats();
+
+  resizeCanvas(m2Canvas);
+  const w = m2Canvas.width, h = m2Canvas.height, ctx = m2Ctx;
+  ctx.clearRect(0, 0, w, h);
+  const R = m2.cfg.ringSize, mask = R - 1;
+  const tailIdx = m2.tail & mask, headIdx = m2.head & mask, avail = m2.head - m2.tail;
+
+  // --- anillo ---
+  const topH = h - 140;
+  const radius = Math.max(Math.min(70, topH / 2 - 16, w * 0.11), 20);
+  const cx = radius + 50, cy = topH / 2 + 8;
+  ctx.lineWidth = 24;
+  ctx.beginPath(); ctx.arc(cx, cy, radius, 0, Math.PI * 2); ctx.strokeStyle = gridCol(); ctx.stroke();
+  const ang = idx => (idx / R) * Math.PI * 2 - Math.PI / 2;
+  if (avail > 0) { ctx.beginPath(); ctx.arc(cx, cy, radius, ang(tailIdx), ang(tailIdx) + (avail / R) * Math.PI * 2); ctx.strokeStyle = C.fw; ctx.stroke(); }
+  if (m2.infl > 0) { ctx.beginPath(); ctx.arc(cx, cy, radius, ang(tailIdx), ang(tailIdx) + (m2.infl / R) * Math.PI * 2); ctx.strokeStyle = C.usb; ctx.stroke(); }
+  ctx.fillStyle = C.warn; ctx.beginPath(); ctx.arc(cx + Math.cos(ang(headIdx)) * radius, cy + Math.sin(ang(headIdx)) * radius, 6, 0, Math.PI * 2); ctx.fill();
+  ctx.textAlign = 'center'; ctx.fillStyle = txtCol(); ctx.font = 'bold 13px system-ui';
+  ctx.fillText(`${(100 * avail / R).toFixed(0)}% ocupado`, cx, cy - 2);
+  ctx.font = '10px system-ui'; ctx.fillStyle = dimCol(); ctx.fillText(`${avail} / ${R} B`, cx, cy + 13);
+
+  // --- barra lineal ---
+  const bx = cx + radius + 60, bw = Math.max(w - bx - 30, 120), by = cy - 22, bh = 44;
+  ctx.fillStyle = gridCol(); ctx.fillRect(bx, by, bw, bh);
+  const seg = (a, b, color) => { ctx.fillStyle = color; ctx.fillRect(bx + (a / R) * bw, by, Math.max(((b - a) / R) * bw, 0), bh); };
+  if (avail > 0) {
+    if (tailIdx + avail <= R) seg(tailIdx, tailIdx + avail, C.fw);
+    else { seg(tailIdx, R, C.fw); seg(0, (tailIdx + avail) - R, C.fw); }
+  }
+  if (m2.infl > 0) {
+    if (tailIdx + m2.infl <= R) seg(tailIdx, tailIdx + m2.infl, C.usb);
+    else { seg(tailIdx, R, C.usb); seg(0, tailIdx + m2.infl - R, C.usb); }
+  }
+  ctx.fillStyle = C.warn; ctx.fillRect(bx + (headIdx / R) * bw - 2, by - 8, 4, bh + 16);
+  ctx.font = 'bold 10px monospace'; ctx.textAlign = 'center'; ctx.fillText('HEAD', bx + (headIdx / R) * bw, by - 12);
+  ctx.fillStyle = C.usb; ctx.fillRect(bx + (tailIdx / R) * bw - 2, by - 8, 4, bh + 16); ctx.fillText('TAIL', bx + (tailIdx / R) * bw, by + bh + 22);
+  ctx.textAlign = 'left'; ctx.fillStyle = dimCol(); ctx.font = '10px system-ui';
+  ctx.fillText('verde = pendiente de enviar · azul = en vuelo por USB (reservado, zero-copy)', bx, by + bh + 40);
+  if (m2.stalled) { ctx.fillStyle = C.danger; ctx.font = 'bold 12px system-ui'; ctx.fillText('HOST CONGELADO: no atiende al USB', bx, by - 30); }
+
+  // --- gráfico de ocupación (últimos 3 s) ---
+  const x0 = 50, x1 = w - 20, y0 = h - 118, y1 = h - 18, N = 3000;
+  ctx.fillStyle = panelCol(); ctx.fillRect(x0, y0, x1 - x0, y1 - y0);
+  const hx = i => x0 + ((N - m2.histOcc.length + i) / N) * (x1 - x0);
+  for (let i = 0; i < m2.histStall.length; i++) {
+    if (m2.histStall[i]) { ctx.fillStyle = 'rgba(239,68,68,0.22)'; ctx.fillRect(hx(i), y0, Math.max((x1 - x0) / N, 1), y1 - y0); }
+  }
+  ctx.strokeStyle = C.danger; ctx.setLineDash([4, 4]); ctx.beginPath(); ctx.moveTo(x0, y0 + 1); ctx.lineTo(x1, y0 + 1); ctx.stroke(); ctx.setLineDash([]);
+  ctx.beginPath(); ctx.strokeStyle = C.fw; ctx.lineWidth = 1.5;
+  m2.histOcc.forEach((v, i) => { const x = hx(i), y = y1 - v * (y1 - y0); if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y); });
+  ctx.stroke();
+  ctx.lineWidth = 1; ctx.fillStyle = C.danger;
+  m2.histDrop.forEach((d, i) => { if (d) ctx.fillRect(hx(i), y0, 2, 8); });
+  ctx.fillStyle = dimCol(); ctx.font = '10px system-ui'; ctx.textAlign = 'left';
+  ctx.fillText('ocupación del ring (últimos 3 s) · línea roja = ring lleno · marcas rojas arriba = tramas descartadas', x0, y0 - 5);
+  ctx.textAlign = 'right'; ctx.fillText('100%', x0 - 4, y0 + 8); ctx.fillText('0%', x0 - 4, y1);
+
+  requestAnimationFrame(drawM2);
+}
+
+/* =========================================================================
+   MODULO 3: EXPLORADOR DE TRAMAS (la codificación está en la parte pura)
+   ========================================================================= */
+(function () {
+  const st = { tipo: 'audio', seq: 42, n: 256, L: 5649426, R: -4530946, txt: 'PONG', canal: 'L' };
+  let frame = [];
+
+  function buildFrame() {
+    const out = []; const add = (b, f, info) => out.push({ b: b & 0xFF, f, info });
+    const isA = st.tipo === 'audio';
+    const txt = isA ? [] : ascii(st.txt);
+    const n = isA ? st.n : txt.length;
+    add(0xAA, 'sync', 'Byte 0 · sync 0 = 0xAA (10101010). Constante: <code>ring_put(STREAM_SYNC0)</code>. El parser de Python busca este byte seguido de 0x55.');
+    add(0x55, 'sync', 'Byte 1 · sync 1 = 0x55 (01010101). Constante. Juntos forman la marca <code>AA 55</code> que permite reencontrar el inicio de una trama.');
+    add(isA ? 1 : 2, 'tipo', `Byte 2 · tipo = 0x${hex2(isA ? 1 : 2)} → ${isA ? 'audio: el payload son frames estéreo de 6 bytes' : 'texto: el payload son caracteres ASCII (respuesta a un comando)'}.`);
+    add(st.seq, 'seq', `Byte 3 · seq = ${st.seq & 0xFF} (0x${hex2(st.seq)}). Contador de 8 bits: <code>ring_put(seq++)</code>. La PC compara con el anterior para contar pérdidas.`);
+    add(n & 0xFF, 'n', `Byte 4 · n, parte BAJA = 0x${hex2(n & 0xFF)}. n = ${n} = 0x${hexN(n, 4)}. Little-endian: primero el byte bajo (<code>n &amp; 0xFF</code>).`);
+    add(n >> 8, 'n', `Byte 5 · n, parte ALTA = 0x${hex2(n >> 8)} (<code>n &gt;&gt; 8</code>). Python recompone <code>n = buf[4] | (buf[5] &lt;&lt; 8)</code> = ${n}.`);
+    if (isA) {
+      [['L', st.L], ['R', st.R]].forEach(([ch, val]) => {
+        const s = encodeSampleSteps(val);
+        [[s.b0, 0, 'LSB: bits 7..0, <code>(uint8_t)l</code>'], [s.b1, 1, 'medio: bits 15..8, <code>(uint8_t)(l &gt;&gt; 8)</code>'], [s.b2, 2, 'MSB: bits 23..16 (incluye el signo), <code>(uint8_t)(l &gt;&gt; 16)</code>']]
+          .forEach(([b, k, d]) => add(b, ch, `Byte ${6 + (ch === 'L' ? 0 : 3) + k} · frame 0, canal ${ch}, byte ${k} (${d}). Muestra completa = ${s.dec} (0x${hexN(s.u24, 6)} en 24 bits).`));
+      });
+    } else {
+      txt.forEach((c, i) => add(c, 'txt', `Byte ${6 + i} · carácter ${i + 1} de ${n}: '${esc(String.fromCharCode(c))}' = ASCII ${c} = 0x${hex2(c)}. Un byte por carácter, sin terminador.`));
+    }
+    return out;
+  }
+
+  function renderHex() {
+    frame = buildFrame();
+    const html = [];
+    frame.forEach((x, i) => {
+      if (i === 6) html.push('<span class="sep"></span>');
+      if (st.tipo === 'audio' && i === 12) html.push('<span class="sep"></span>');
+      html.push(`<span class="bt ${x.f}" data-i="${i}" tabindex="0">${hex2(x.b)}</span>`);
+    });
+    if (st.tipo === 'audio') html.push(`<span class="bt more">… ${st.n - 1} frames más (${(st.n - 1) * 6} B)</span>`);
+    $('hexOut').innerHTML = html.join('');
+    const total = st.tipo === 'audio' ? HDR + st.n * 6 : HDR + ascii(st.txt).length;
+    $('sizeOut').textContent = `Tamaño total de la trama: ${total} bytes` + (st.tipo === 'audio' ? ` = 6 de encabezado + ${st.n} frames × 6 B. Se muestra solo el primer frame; el firmware siempre manda n = 256.` : ` = 6 de encabezado + ${ascii(st.txt).length} caracteres.`);
+  }
+
+  function showInfo(i) {
+    document.querySelectorAll('#hexOut .bt.sel').forEach(e => e.classList.remove('sel'));
+    const el = document.querySelector(`#hexOut .bt[data-i="${i}"]`);
+    if (el) el.classList.add('sel');
+    $('byteInfo').innerHTML = frame[i] ? frame[i].info : '';
+  }
+
+  function renderPipe() {
+    if (st.tipo === 'texto') {
+      $('pipeTitle').textContent = 'Del texto al byte: codificación ASCII';
+      $('boxCanal').style.display = 'none';
+      const rows = ascii(st.txt).map(c => `<tr><td>'${esc(String.fromCharCode(c))}'</td><td>${c}</td><td>0x${hex2(c)}</td><td class="mono">${c.toString(2).padStart(8, '0')}</td></tr>`).join('');
+      $('pipeOut').innerHTML = `<table class="state-table"><tr><th>Carácter</th><th>Código ASCII</th><th>Byte</th><th>Bits (el bit 7 es siempre 0 en ASCII)</th></tr>${rows}</table>
+        <div class="what-am-i-seeing" style="margin-top:8px">El firmware copia los caracteres tal cual (<code>ring_put((uint8_t)txt[i])</code>) y <b>no</b> agrega el <code>'\\0'</code> final: la longitud viaja en <code>n</code>. Python hace <code>payload.decode("ascii")</code>.</div>`;
+      return;
+    }
+    $('pipeTitle').textContent = 'De la señal analógica al byte: recorrido de una muestra';
+    $('boxCanal').style.display = '';
+    const v = st.canal === 'L' ? st.L : st.R;
+    const s = encodeSampleSteps(v);
+    const bits24 = grp8(s.u24, 24).replace(/^(.)/, '<span class="bit-sign">$1</span>');
+    const bits32 = grp8(s.word32, 32).replace(/^(.)/, '<span class="bit-sign">$1</span>').replace(/ ([01]{8})$/, ' <span class="pad">$1</span>');
+    const row = (n, donde, val, code) => `<tr><td><b>${n}</b></td><td>${donde}</td><td class="mono">${val}</td><td class="mono">${code}</td></tr>`;
+    $('pipeOut').innerHTML = `<table class="state-table">
+      <tr><th>#</th><th>Dónde</th><th>Valor</th><th>Código / regla</th></tr>
+      ${row(1, 'El ADC del PCM3060 entrega un entero de 24 bits con signo (complemento a 2)', `${s.v}<br>0x${hexN(s.u24, 6)}<br>${bits24}`, 'rango −8 388 608 … +8 388 607; el primer bit (rojo) es el signo')}
+      ${row(2, 'Bus I2S: slot de 32 bits, el MSB sale primero', `0x${hexN(s.word32, 8)}<br>${bits32}`, '24 bits de dato alineados a la izquierda + 8 bits de relleno (gris) que no se usan')}
+      ${row(3, 'DMA guarda el slot en <code>rx_buf</code> como 2 halfwords de 16 bits', `f[0] = 0x${hexN(s.hi, 4)}<br>f[1] = 0x${hexN(s.lo, 4)}`, 'la HAL usa halfwords; el byte bajo de f[1] es relleno')}
+      ${row(4, 'Firmware: <code>stream_push_audio</code> los une y desplaza', `unido = 0x${hexN(s.joined, 8)}<br>l = ${s.l} (0x${hexN(s.l, 8)})`, '(int32_t)(((uint32_t)f[0] &lt;&lt; 16) | f[1]) &gt;&gt; 8<br>el &gt;&gt; 8 con signo baja los 24 bits y <b>extiende el signo</b> a 32')}
+      ${row(5, 'Firmware: escribe 3 bytes en el ring, byte bajo primero', `b0 = 0x${hex2(s.b0)} (${s.b0.toString(2).padStart(8, '0')})<br>b1 = 0x${hex2(s.b1)} (${s.b1.toString(2).padStart(8, '0')})<br>b2 = 0x${hex2(s.b2)} (${s.b2.toString(2).padStart(8, '0')})`, 'ring_put((uint8_t)l);<br>ring_put((uint8_t)(l &gt;&gt; 8));<br>ring_put((uint8_t)(l &gt;&gt; 16));')}
+      ${row(6, 'Python: <code>_guardar_audio</code> rearma y extiende el signo', `raw = 0x${hexN(s.raw, 6)} = ${s.raw}<br>con signo = ${s.dec}<br>normalizado = ${s.norm.toFixed(6)}`, 'l = a[:,0] | (a[:,1] &lt;&lt; 8) | (a[:,2] &lt;&lt; 16)<br>l = ((l ^ 0x800000) − 0x800000) / FULL_SCALE<br>FULL_SCALE = 2<sup>23</sup> = 8 388 608')}
+    </table>
+    <div style="margin-top:6px">Verificación: valor recuperado en la PC ${s.dec === s.v ? '<span class="okc">= valor original ✓</span>' : '<span class="badc">≠ valor original</span>'}. El truco <code>(x ^ 0x800000) − 0x800000</code> equivale a "si el bit 23 está en 1, restar 2<sup>24</sup>".</div>`;
+  }
+
+  function renderLE() {
+    const n = st.tipo === 'audio' ? st.n : ascii(st.txt).length;
+    const lo = n & 0xFF, hi = (n >> 8) & 0xFF;
+    $('leOut').innerHTML = `n = ${n} = 0x${hexN(n, 4)}<br>Bytes en el cable: <b class="mono">${hex2(lo)} ${hex2(hi)}</b> (bajo, alto)<br>Lectura correcta (little-endian): ${hex2(lo)} + ${hex2(hi)}·256 = <b>${lo | (hi << 8)}</b>`;
+    $('leWrong').textContent = String((lo << 8) | hi);
+  }
+
+  function renderSeq() {
+    const last = (+$('sLast').value) & 0xFF, now = (+$('sNow').value) & 0xFF;
+    const p = lostFrames(last, now);
+    const tms = (p * FRAME_PERIOD_MS).toFixed(1);
+    let txt = `<code>perdidas = (seq − último − 1) &amp; 0xFF = (${now} − ${last} − 1) &amp; 0xFF = ${now - last - 1} &amp; 0xFF = <b>${p}</b></code><br>`;
+    if (p === 0) txt += 'Sin pérdidas: el seq es el siguiente. <span class="badc">Ojo:</span> si se hubieran perdido exactamente 256 tramas seguidas (~0,67 s), el resultado sería idéntico y el parser no lo notaría.';
+    else if (now === last) txt += '<span class="badc">Mismo seq que la trama anterior:</span> el cálculo da 255. En este sistema no debería pasar (cada trama incrementa seq), así que indicaría un duplicado o una pérdida casi completa de la vuelta.';
+    else txt += `Faltaron ${p} trama(s) ≈ ${tms} ms de audio. El <code>&amp; 0xFF</code> hace que funcione al dar la vuelta (255 → 0): ${now - last - 1 < 0 ? `la resta da ${now - last - 1}, que en 8 bits equivale a ${p}.` : 'no hubo vuelta en este caso.'}`;
+    $('seqOut').innerHTML = txt;
+  }
+
+  let plog = [], pi = 0;
+  function renderParser() {
+    const e = pi === 0 ? null : plog[pi - 1];
+    $('pBuf').innerHTML = e ? (e.buf.length ? e.buf.map(b => `<span class="bt plain">${hex2(b)}</span>`).join('') : '<span class="pad">(vacío)</span>') : '<span class="pad">(todavía no llegó nada)</span>';
+    $('pMsg').innerHTML = e ? esc(e.msg) : 'Tocá «Paso» para recibir la primera lectura.';
+    $('pStats').textContent = e ? `tramas válidas: ${e.tramas} · perdidas detectadas: ${e.perdidas}` : '';
+    $('pLog').innerHTML = plog.slice(0, pi).map((x, i) => `<div class="${i === pi - 1 ? 'cur' : ''}">${String(i + 1).padStart(2, '0')}. ${esc(x.msg)}</div>`).join('');
+    $('pLog').scrollTop = $('pLog').scrollHeight;
+    $('pStep').disabled = pi >= plog.length;
+  }
+
+  function renderAll() { renderHex(); renderPipe(); renderLE(); showInfo(0); }
+
+  function readInputs() {
+    st.tipo = $('fTipo').value; st.seq = (+$('fSeq').value) & 0xFF;
+    st.n = Math.max(1, Math.min(4096, +$('fN').value || 256));
+    st.L = Math.trunc(+$('fL').value) || 0; st.R = Math.trunc(+$('fR').value) || 0;
+    st.txt = $('fT').value; st.canal = $('fCanal').value;
+    const isA = st.tipo === 'audio';
+    $('boxN').style.display = $('boxL').style.display = $('boxR').style.display = $('presets').style.display = isA ? '' : 'none';
+    $('boxT').style.display = isA ? 'none' : '';
+  }
+
+  ['fTipo', 'fSeq', 'fN', 'fL', 'fR', 'fT', 'fCanal'].forEach(id => $(id).addEventListener('input', () => { readInputs(); renderAll(); }));
+  $('presets').addEventListener('click', e => { const b = e.target.closest('button'); if (!b) return; $('fL').value = b.dataset.l; $('fR').value = b.dataset.r; readInputs(); renderAll(); });
+  ['mouseover', 'click', 'focusin'].forEach(ev => $('hexOut').addEventListener(ev, e => { const b = e.target.closest('.bt[data-i]'); if (b) showInfo(+b.dataset.i); }));
+  ['sLast', 'sNow'].forEach(id => $(id).addEventListener('input', renderSeq));
+  document.querySelectorAll('button[data-sl]').forEach(b => b.addEventListener('click', () => { $('sLast').value = b.dataset.sl; $('sNow').value = b.dataset.sn; renderSeq(); }));
+  $('pStep').addEventListener('click', () => { if (pi < plog.length) pi++; renderParser(); });
+  $('pAll').addEventListener('click', () => { pi = plog.length; renderParser(); });
+  $('pReset').addEventListener('click', () => { pi = 0; renderParser(); });
+
+  plog = runParser(demoStream());
+  readInputs(); renderAll(); renderSeq(); renderParser();
+})();
+
+/* =========================================================================
+   MODULO 4: USB CDC Y PUERTO COM VIRTUAL
+   ========================================================================= */
+const MOD4 = {
+  stack: `
+    <h4 style="color:var(--usb-color); margin-bottom:8px;">Pila completa de capas, de la aplicación al hardware</h4>
+    <div style="display:flex; flex-direction:column; gap:6px; font-size:0.85rem;">
+      <div style="background:var(--pc-bg); border-left:4px solid var(--pc-color); padding:8px; border-radius:4px;"><strong>1. Python:</strong> <code>serial.Serial('COM3', 115200, timeout=0.05)</code> &rarr; API de pyserial.</div>
+      <div style="background:var(--pc-bg); border-left:4px solid var(--pc-color); padding:8px; border-radius:4px;"><strong>2. Win32:</strong> <code>CreateFile("\\\\.\\COM3")</code>, <code>SetCommState()</code>, <code>ReadFile()</code>, <code>WriteFile()</code>.</div>
+      <div style="background:var(--pc-bg); border-left:4px solid var(--pc-color); padding:8px; border-radius:4px;"><strong>3. Driver de función USB:</strong> <code>usbser.sys</code> (Windows) o <code>cdc_acm</code> (Linux). Traduce llamadas serie a transferencias USB.</div>
+      <div style="background:var(--usb-bg); border-left:4px solid var(--usb-color); padding:8px; border-radius:4px;"><strong>4. Controlador host USB:</strong> planifica los frames de 1 ms y emite los tokens IN/OUT por D+/D&minus;. El host es el único maestro del bus.</div>
+      <div style="background:var(--fw-bg); border-left:4px solid var(--fw-color); padding:8px; border-radius:4px;"><strong>5. Periférico OTG_FS del STM32F411:</strong> PHY embebido, Full Speed, sin DMA (la CPU copia los datos al FIFO dentro de la interrupción). FIFOs configurados: RX 512 B, TX del EP0 256 B, TX del EP1 512 B.</div>
+      <div style="background:var(--fw-bg); border-left:4px solid var(--fw-color); padding:8px; border-radius:4px;"><strong>6. Firmware:</strong> librería USB de ST (<code>usbd_cdc.c</code>), tu capa <code>usbd_cdc_if.c</code> (<code>CDC_Receive_FS</code>, <code>CDC_TransmitCplt_FS</code>) y <code>stream.c</code>.</div>
+    </div>`,
+  enum: `
+    <h4 style="color:var(--usb-color); margin-bottom:8px;">Enumeración al enchufar el cable (USB 2.0, cap. 9)</h4>
+    <ol style="margin-left:1.2rem; font-size:0.86rem; color:var(--text-muted); display:flex; flex-direction:column; gap:6px;">
+      <li><strong>Detección:</strong> el dispositivo conecta un pull-up en D+ y el host reconoce un dispositivo Full Speed (12 Mbit/s). <em>En el STM32F4 ese pull-up es interno y se conecta por software cuando arranca la pila USB (<code>USBD_Start</code>); no verificado en tu placa.</em></li>
+      <li><strong>Reset del bus:</strong> el host fuerza SE0 (D+ y D&minus; a 0 V) durante al menos 10 ms. El dispositivo pasa al estado <em>DEFAULT</em>.</li>
+      <li><strong>GET_DESCRIPTOR en EP0:</strong> el host lee los primeros bytes del descriptor de dispositivo para saber el tamaño máximo de paquete del EP0 (64 B).</li>
+      <li><strong>SET_ADDRESS:</strong> el host asigna una dirección única al dispositivo (estado <em>ADDRESS</em>).</li>
+      <li><strong>Descriptores completos:</strong> el host pide el árbol de configuración. Lo importante:
+        <ul style="margin-left:1rem; margin-top:4px;">
+          <li><em>Clase CDC (0x02), subclase ACM (0x02):</em> le dice al sistema operativo que es un puerto serie virtual y qué driver cargar (<code>usbser.sys</code>).</li>
+          <li><em>Interfaz de comunicaciones:</em> endpoint EP2 IN (0x82), interrupt, 8 B, para notificaciones.</li>
+          <li><em>Interfaz de datos:</em> EP1 IN (0x81) bulk 64 B y EP1 OUT (0x01) bulk 64 B. Por acá viaja todo lo de este proyecto.</li>
+        </ul>
+      </li>
+      <li><strong>SET_CONFIGURATION(1):</strong> el dispositivo pasa a <em>CONFIGURED</em>, se habilitan los endpoints y Windows crea el <code>COMn</code>. Recién ahí <code>stream_kick()</code> deja de limpiar el ring (comprueba <code>dev_state == USBD_STATE_CONFIGURED</code>).</li>
+    </ol>`,
+  nak: `
+    <h4 style="color:var(--usb-color); margin-bottom:8px;">Control de flujo natural con NAK (USB 2.0, cap. 5)</h4>
+    <div style="font-size:0.86rem; color:var(--text-muted); margin-bottom:10px;">El host es el <strong>único maestro</strong> del bus. El STM32 nunca transmite por su cuenta: espera un token <code>IN</code> del host y contesta con datos o con NAK.</div>
+    <div class="grid-2" style="font-size:0.84rem;">
+      <div style="background:var(--surface); border:1px solid var(--border); padding:10px; border-radius:6px;">
+        <strong style="color:var(--warn-color);">Caso 1: el STM32 no tiene datos listos</strong>
+        <div style="margin-top:6px; font-family:var(--font-mono);">Host &rarr; <code>[IN, EP1]</code><br>STM32 &larr; <code>[NAK]</code></div>
+        <div style="margin-top:6px; color:var(--text-dim);"><strong>NAK no es un error:</strong> significa "ahora no". Lo contesta el hardware del periférico sin despertar a la CPU. El host reintenta más tarde.</div>
+      </div>
+      <div style="background:var(--surface); border:1px solid var(--border); padding:10px; border-radius:6px;">
+        <strong style="color:var(--fw-color);">Caso 2: hay datos cargados en el FIFO</strong>
+        <div style="margin-top:6px; font-family:var(--font-mono);">Host &rarr; <code>[IN, EP1]</code><br>STM32 &larr; <code>[DATA0/1: hasta 64 B + CRC16]</code><br>Host &rarr; <code>[ACK]</code></div>
+        <div style="margin-top:6px; color:var(--text-dim);">Si el CRC falla, el host no confirma y el paquete se reenvía. Por eso en el cable no se pierden datos.</div>
+      </div>
+    </div>
+    <div style="margin-top:10px; font-size:0.85rem; color:var(--text-muted);"><strong>Y en la dirección contraria</strong> (PC &rarr; STM32): mientras <code>CDC_Receive_FS</code> no rearma el endpoint OUT (<code>USBD_CDC_ReceivePacket</code>), el STM32 contesta NAK a los paquetes OUT del host, y el host espera.</div>
+    <div style="margin-top:10px; font-size:0.85rem; color:var(--text-muted);"><strong>La consecuencia para el audio:</strong> si el host deja de pedir datos (porque el hilo de Python no lee), el STM32 sigue respondiendo NAK, el ring se llena y los frames nuevos se descartan. El cable no pierde nada; la pérdida ocurre en el ring.</div>`,
+  uart_vs_cdc: `
+    <h4 style="color:var(--usb-color); margin-bottom:8px;">UART física vs USB CDC virtual, parámetro por parámetro</h4>
+    <div class="scroll"><table class="state-table" style="font-size:0.82rem;">
+      <tr><th>Parámetro</th><th>En una UART real</th><th>En este proyecto (USB CDC)</th><th>Por qué</th></tr>
+      <tr><td><strong>Baudrate</strong></td><td>Fija el reloj de muestreo; si no coincide hay errores de trama. Limita el ancho de banda (115200 baudios &asymp; 11,5 kB/s).</td><td><strong>Se acepta y se ignora.</strong> Los datos van a 12 Mbit/s por el cable sin importar el valor.</td><td>El host manda <code>SET_LINE_CODING</code> por EP0; <code>CDC_Control_FS</code> tiene ese caso vacío y devuelve <code>USBD_OK</code>.</td></tr>
+      <tr><td><strong>Bits de datos, paridad, stop bits</strong></td><td>Generan bits físicos en la línea.</td><td><strong>Ignorados.</strong></td><td>USB transporta bytes completos protegidos por CRC16; no existen esos bits en el cable.</td></tr>
+      <tr><td><strong>DTR / RTS</strong></td><td>Pines físicos (control de flujo, reset de placas).</td><td><strong>Ignorados.</strong> Llegan como mensaje <code>SET_CONTROL_LINE_STATE</code>.</td><td>Ese caso también está vacío en <code>CDC_Control_FS</code>. Por eso el STM32 transmite aunque la PC no levante DTR.</td></tr>
+      <tr><td><strong>Timeout de lectura</strong></td><td>Es del software de la PC.</td><td>Controla cuánto espera <code>ReadFile()</code> antes de devolver lo que haya (en tu script, 0,05 s).</td><td>Es un parámetro de pyserial/Windows, no del dispositivo.</td></tr>
+      <tr><td><strong>Tamaño de buffer</strong></td><td>FIFO de pocos bytes en el chip.</td><td>Depende del driver: por defecto pyserial pide 4 kB a Windows; el visor pide 1 MB.</td><td>Un buffer más grande absorbe pausas del hilo lector. <em>No verificado que usbser.sys respete el pedido.</em></td></tr>
+    </table></div>
+    <div class="box" style="margin-top:10px">
+      <strong>El pedido <code>SET_LINE_CODING</code> (7 bytes por EP0):</strong>
+      <div class="mono" style="margin-top:6px">dwDTERate (4 B, velocidad) · bCharFormat (1 B, stop bits) · bParityType (1 B) · bDataBits (1 B)</div>
+      <div style="margin-top:4px">El firmware lo recibe y lo descarta. <code>GET_LINE_CODING</code> también está vacío, así que el firmware no recuerda lo que el host le pidió.</div>
+    </div>`,
+  bandwidth: `
+    <h4 style="color:var(--usb-color); margin-bottom:8px;">Ancho de banda Full Speed y cuánto aguanta cada buffer</h4>
+    <div class="grid-2" style="font-size:0.85rem; color:var(--text-muted);">
+      <div style="background:var(--surface); border:1px solid var(--border); padding:10px; border-radius:6px;">
+        <strong style="color:var(--text);">Capacidad teórica de un endpoint bulk (USB 2.0, cap. 5):</strong>
+        <div class="mono" style="margin-top:6px; line-height:1.8">
+          Un frame Full Speed dura 1 ms y admite hasta 19 paquetes bulk de 64 B.<br>
+          Máximo teórico = 19 &times; 64 B / 1 ms = <strong>1216 kB/s</strong><br>
+          Consumo del proyecto &asymp; <strong>588 kB/s</strong> (586 de audio + encabezados)<br>
+          Uso del bus = 588 / 1216 &asymp; <strong>48 %</strong> (queda ~52 % de margen)
+        </div>
+        <div style="margin-top:6px; color:var(--text-dim);">Es un máximo teórico: el host reparte el bus entre todos los dispositivos conectados y decide cuándo hace cada IN.</div>
+      </div>
+      <div style="background:var(--surface); border:1px solid var(--border); padding:10px; border-radius:6px;">
+        <strong style="color:var(--text);">Cuánto audio aguanta cada buffer (a 588 kB/s):</strong>
+        <ul style="margin-left:1.2rem; margin-top:6px; display:flex; flex-direction:column; gap:4px;">
+          <li><strong>FIFO TX del EP1 (512 B):</strong> 512 / 588 &asymp; <strong>0,87 ms</strong>.</li>
+          <li><strong>Ring del firmware (16&nbsp;384 B):</strong> &asymp; <strong>27,9 ms</strong> (~10 tramas).</li>
+          <li><strong>Ring propuesto (65&nbsp;536 B):</strong> &asymp; <strong>111,4 ms</strong>.</li>
+          <li><strong>Buffer por defecto de pyserial (4096 B):</strong> &asymp; <strong>7,0 ms</strong>.</li>
+          <li><strong>Buffer pedido por el visor (1 MiB):</strong> &asymp; <strong>1,78 s</strong> <span class="badge-tag badge-assumed">si usbser.sys lo respeta</span>.</li>
+          <li><strong>Ring de NumPy (131&nbsp;072 muestras):</strong> 131&nbsp;072 / 97&nbsp;656,25 &asymp; <strong>1,34 s</strong>.</li>
+        </ul>
+      </div>
+    </div>`
+};
+function switchMod4Tab(tab) {
+  document.querySelectorAll('#mod4Tabs .tab-btn').forEach(b => b.classList.toggle('active', b.dataset.tab === tab));
+  $('mod4Content').innerHTML = MOD4[tab];
+}
+document.querySelectorAll('#mod4Tabs .tab-btn').forEach(b => b.addEventListener('click', () => switchMod4Tab(b.dataset.tab)));
+
+/* =========================================================================
+   MODULO 5: CAMINO INVERSO (usa simulateRx, lógica pura arriba)
+   ========================================================================= */
+const M5_CODE = [
+  'for (uint32_t i = 0; i < *Len; i++) {',
+  '    uint8_t c = Buf[i];',
+  '    if (c == \'\\n\') {',
+  '        usb_rx_buffer[usb_rx_index] = \'\\0\';',
+  '        parse_command((char *) usb_rx_buffer);',
+  '        usb_rx_index = 0;',
+  '    } else {',
+  '        if (usb_rx_index < USB_RX_BUFFER_SIZE - 1)      // 128 - 1',
+  '            usb_rx_buffer[usb_rx_index++] = c;',
+  '        else',
+  '            usb_rx_index = 0;   // buffer lleno: se descarta lo acumulado',
+  '    }',
+  '}',
+  'USBD_CDC_SetRxBuffer(&hUsbDeviceFS, &Buf[0]);',
+  'USBD_CDC_ReceivePacket(&hUsbDeviceFS);   // rearma el endpoint (hasta acá, NAK)'
+];
+const M5_CODE2 = [
+  '// parse_command(command)   (misma interrupción USB)',
+  'if (strncmp(command, "LFREQ:", 6) == 0)  frecuencia[LEFT] = atof(&command[6]);',
+  'else if (strcmp(command, "LOFF") == 0)   salida_activa[LEFT] = 0;',
+  'else if (strcmp(command, "PING") == 0)   stream_push_text("PONG");',
+  '// main(): lazo principal, en su próxima pasada',
+  'ftw[0] = (uint32_t)(frecuencia[0] * 4294967296.0 / FS);   // FS = 97656.25'
+];
+const M5_G0 = { freq: [1000, 1000], on: [1, 1], stream: 0 };
+let m5Steps = [], m5Cur = 0, m5Packets = [];
+
+function m5PktLabel(p, i) {
+  const t = p.length > 24 ? esc(p.slice(0, 12)) + '…' : esc(p);
+  return `#${i + 1} ${t.replace(/\n/g, '⏎')} · ${p.length} B`;
+}
+function m5Load(name) {
+  const sc = M5_SCENARIOS[name];
+  m5Packets = sc.packets; m5Steps = simulateRx(m5Packets); m5Cur = 0;
+  if ($('m5Scenario').value !== name) $('m5Scenario').value = name;
+  m5Render();
+}
+function m5Step() { if (m5Cur < m5Steps.length) m5Cur++; m5Render(); }
+function m5RunAll() { m5Cur = m5Steps.length; m5Render(); }
+
+function m5Render() {
+  $('m5Packets').innerHTML = m5Packets.map((p, i) => `<span class="pkt${i < m5Cur - 1 ? ' done' : ''}${i === m5Cur - 1 ? ' cur' : ''}">${m5PktLabel(p, i)}</span>`).join('');
+  $('m5StepBtn').disabled = m5Cur >= m5Steps.length;
+  const step = m5Cur > 0 ? m5Steps[m5Cur - 1] : null;
+  const g = step ? step.g : M5_G0;
+  const prev = m5Cur > 1 ? m5Steps[m5Cur - 2].g : M5_G0;
+
+  let bufTxt = step ? step.buf : '';
+  if (bufTxt.length > 60) bufTxt = bufTxt.slice(0, 30) + ` … (${step.buf.length} caracteres) … ` + bufTxt.slice(-15);
+  $('m5Buf').innerHTML = step ? (bufTxt ? esc(bufTxt) : '<span style="color:var(--text-dim)">(vacío)</span>') : '<span style="color:var(--text-dim)">(vacío)</span>';
+  $('m5Idx').textContent = step ? step.idx : 0;
+
+  const chg = (a, b) => (a !== b ? ' style="color:var(--warn-color);font-weight:700"' : '');
+  $('m5Globals').innerHTML =
+    `<div${chg(g.freq[0], prev.freq[0])}>frecuencia[LEFT]  = ${g.freq[0]}</div>` +
+    `<div${chg(g.freq[1], prev.freq[1])}>frecuencia[RIGHT] = ${g.freq[1]}</div>` +
+    `<div${chg(g.on[0], prev.on[0])}>salida_activa[LEFT]  = ${g.on[0]}</div>` +
+    `<div${chg(g.on[1], prev.on[1])}>salida_activa[RIGHT] = ${g.on[1]}</div>` +
+    `<div style="margin-top:6px;color:var(--text-muted)">Lazo principal, próxima pasada: <code>ftw[0] = (uint32_t)(${g.freq[0]} × 4294967296.0 / 97656.25)</code> = <strong>${ftwOf(g.freq[0])}</strong></div>`;
+
+  // eventos del paquete actual
+  const evs = step ? step.events : [];
+  const lines = [];
+  if (!step) lines.push('Todavía no llegó ningún paquete. Tocá «Paso».');
+  else {
+    lines.push(`Llega el paquete #${step.pi + 1} (${step.packet.length} B) por EP1 OUT → <code>CDC_Receive_FS</code>.`);
+    evs.forEach(e => {
+      if (e.t === 'acc') lines.push(`Se acumulan ${e.n} carácter(es) en <code>usb_rx_buffer</code>.`);
+      else if (e.t === 'cmd') lines.push(`Llega <code>'\\n'</code> → <code>parse_command("${esc(e.cmd.length > 20 ? e.cmd.slice(0, 20) + '…' : e.cmd)}")</code> → ${esc(e.text)}.`);
+      else lines.push(`<span style="color:var(--danger-color)">Overflow:</span> <code>usb_rx_index</code> llegó a 127; se descartan los ${e.lost} caracteres acumulados (índice = 0) y lo que siga se acumula como si fuera una línea nueva.`);
+    });
+    if (!evs.some(e => e.t === 'cmd')) lines.push('Todavía no hay <code>\\n</code>: no se ejecuta nada. El comando queda a medias en el buffer.');
+    lines.push('<code>USBD_CDC_ReceivePacket</code> rearma el endpoint: recién ahora acepta el próximo paquete.');
+  }
+  $('m5Log').innerHTML = lines.map(l => `<div>${l}</div>`).join('');
+
+  if (step && step.resp) {
+    const r = step.resp;
+    $('m5Resp').innerHTML = `<span class="okc">Respuesta del firmware</span> (<code>stream_push_text("PONG")</code>) por EP1 IN, en el mismo flujo que el audio:<div class="hex" style="margin-top:6px">` +
+      r.map((b, i) => `<span class="bt ${i < 2 ? 'sync' : i === 2 ? 'tipo' : i === 3 ? 'seq' : i < 6 ? 'n' : 'txt'}" style="cursor:default">${hex2(b)}</span>`).join('') +
+      `</div><div style="margin-top:4px;color:var(--text-dim)">AA 55 | 02 (texto) | ${hex2(r[3])} (seq = ${r[3]}) | 04 00 (n = 4) | 50 4F 4E 47 = "PONG"</div>`;
+  } else $('m5Resp').innerHTML = '';
+
+  // etapas del diagrama
+  const hasCmd = evs.some(e => e.t === 'cmd');
+  const effect = evs.some(e => e.t === 'cmd' && (e.kind === 'freq' || e.kind === 'onoff' || e.kind === 'stream'));
+  const on = step ? [0, 1, 2].concat(hasCmd ? [3] : []).concat(effect ? [4, 5] : []) : [];
+  for (let i = 0; i < 6; i++) $('m5s' + i).classList.toggle('on', on.indexOf(i) >= 0);
+
+  // código resaltado
+  const a1 = [];
+  if (step) {
+    if (evs.some(e => e.t === 'acc')) a1.push(7, 8);
+    if (hasCmd) a1.push(2, 3, 4, 5);
+    if (evs.some(e => e.t === 'overflow')) a1.push(9, 10);
+    a1.push(13, 14);
+  }
+  renderCode('m5Code', M5_CODE, a1);
+  const a2 = [];
+  evs.forEach(e => {
+    if (e.t !== 'cmd') return;
+    if (e.kind === 'freq') a2.push(1, 4, 5);
+    else if (e.kind === 'onoff') a2.push(2);
+    else if (e.kind === 'ping') a2.push(3);
+  });
+  renderCode('m5Code2', M5_CODE2, a2);
+  $('m5Ctx2').textContent = a2.indexOf(5) >= 0 ? 'ISR USB → main()' : 'ISR USB';
+}
+
+/* =========================================================================
+   MODULO 6: LÍNEA DE TIEMPO DE INTERRUPCIONES (usa buildTimeline, lógica pura arriba)
+   ========================================================================= */
+const M6_TOTAL = 1500;
+const M6_T = buildTimeline(M6_TOTAL);
+const m6Canvas = $('m6Canvas');
+const m6Ctx = m6Canvas.getContext('2d');
+let m6Running = true, m6Start = 0, m6Last = performance.now();
+
+function m6Win() { return +$('m6Win').value; }
+function updateM6() {
+  const win = m6Win();
+  $('m6WinVal').textContent = win + ' ms';
+  const max = M6_TOTAL - win;
+  $('m6Start').max = String(max);
+  if (m6Start > max) m6Start = max;
+  $('m6Start').value = String(Math.round(m6Start));
+  $('m6StartVal').textContent = Math.round(m6Start) + ' ms';
+}
+function m6Scrub() { m6Start = +$('m6Start').value; m6Running = false; $('m6PlayBtn').innerHTML = '&#9654; Play'; updateM6(); }
+function toggleM6Play() { m6Running = !m6Running; $('m6PlayBtn').innerHTML = m6Running ? '&#10074;&#10074; Pausa' : '&#9654; Play'; }
+function resetM6() { m6Start = 0; m6Running = true; $('m6PlayBtn').innerHTML = '&#10074;&#10074; Pausa'; updateM6(); }
+
+function initM6Stats() {
+  const T = M6_T;
+  const tkd = T.ticks.filter(x => x.start - x.req > 1e-9);
+  const tkMax = tkd.reduce((m, x) => Math.max(m, x.start - x.req), 0);
+  const busy = T.isrIntervals.reduce((s, iv) => s + (iv[1] - iv[0]), 0);
+  $('m6Stats').innerHTML =
+    `ISR del DMA: ${T.dma.length} (una cada 2,62 ms)<br>` +
+    `ISR del USB: ${T.totalUsb} · quedaron pendientes tras una ISR del DMA: ${T.delayedUsb} (${(100 * T.delayedUsb / T.totalUsb).toFixed(0)} %) · demora máx. ${(T.maxUsbDelay * 1000).toFixed(0)} µs<br>` +
+    `SysTick demorados por ISR de prioridad 0: ${tkd.length} · demora máx. ${(tkMax * 1000).toFixed(0)} µs<br>` +
+    `Lazo principal: ${T.main.filter(m => m.kind === 'oled').length} refrescos de OLED, ${T.main.filter(m => m.kind === 'keypad').length} escaneos de teclado<br>` +
+    `Carga de las ISR sobre la CPU: ${(100 * busy / M6_TOTAL).toFixed(0)} % <span style="color:var(--warn-color)">(con duraciones supuestas)</span>`;
+}
+
+function niceStep(x) { const c = [0.5, 1, 2, 5, 10, 20, 50, 100]; for (let i = 0; i < c.length; i++) if (c[i] >= x) return c[i]; return 100; }
+
+function drawM6() {
+  const now = performance.now();
+  const dt = Math.min(now - m6Last, 50);
+  m6Last = now;
+  const win = m6Win();
+  if (m6Running) {
+    const before = Math.round(m6Start);
+    m6Start += dt * 0.03;
+    if (m6Start > M6_TOTAL - win) m6Start = 0;
+    if (Math.round(m6Start) !== before) updateM6();
+  }
+  resizeCanvas(m6Canvas);
+  const w = m6Canvas.width, h = m6Canvas.height, ctx = m6Ctx;
+  ctx.clearRect(0, 0, w, h);
+  const x0 = 175, x1 = w - 14, pw = x1 - x0, t0 = m6Start, t1 = m6Start + win;
+  const X = t => x0 + (t - t0) / win * pw;
+  const lanes = {
+    dma: { name: 'ISR DMA1 (NVIC 0)', y: 36, h: 34, c: C.fw },
+    usb: { name: 'ISR USB OTG_FS (NVIC 0)', y: 86, h: 34, c: C.usb },
+    tick: { name: 'SysTick (NVIC 15)', y: 136, h: 26, c: C.warn },
+    main: { name: 'Lazo principal main()', y: 182, h: 46, c: C.pc }
+  };
+  ctx.font = 'bold 10px system-ui'; ctx.textAlign = 'left';
+  Object.keys(lanes).forEach(k => {
+    const l = lanes[k];
+    ctx.fillStyle = panelCol(); ctx.fillRect(x0, l.y, pw, l.h);
+    ctx.fillStyle = txtCol(); ctx.fillText(l.name, 10, l.y + l.h / 2 + 4);
+  });
+
+  ctx.save();
+  ctx.beginPath(); ctx.rect(x0, 0, pw, h); ctx.clip();
+  const vis = (a, b) => b >= t0 && a <= t1;
+  const bar = (a, b, y, hh, color, minW) => { if (!vis(a, b)) return; const xa = X(a), wd = Math.max(X(b) - xa, minW || 1); ctx.fillStyle = color; ctx.fillRect(xa, y, wd, hh); };
+
+  // eje de tiempo
+  const step = niceStep(win / 8);
+  ctx.font = '10px system-ui'; ctx.textAlign = 'center';
+  for (let t = Math.ceil(t0 / step) * step; t <= t1; t += step) {
+    const x = X(t);
+    ctx.strokeStyle = gridCol(); ctx.beginPath(); ctx.moveTo(x, 28); ctx.lineTo(x, 240); ctx.stroke();
+    ctx.fillStyle = dimCol(); ctx.fillText(String(Math.round(t * 10) / 10) + ' ms', x, 252);
+  }
+
+  // ISR DMA y USB (con la espera cuando quedaron pendientes)
+  ['dma', 'usb'].forEach(k => {
+    const l = lanes[k];
+    M6_T[k].forEach(r => {
+      if (!vis(r.req, r.end)) return;
+      if (r.start - r.req > 1e-9) {
+        const xa = X(r.req), wd = Math.max(X(r.start) - xa, 1);
+        ctx.fillStyle = l.c + '40'; ctx.fillRect(xa, l.y + 4, wd, l.h - 8);
+        ctx.strokeStyle = l.c; ctx.setLineDash([3, 2]); ctx.strokeRect(xa, l.y + 4, wd, l.h - 8); ctx.setLineDash([]);
+      }
+      bar(r.start, r.end, l.y, l.h, l.c, 1.5);
+    });
+  });
+  // SysTick
+  M6_T.ticks.forEach(r => bar(r.start, r.end, lanes.tick.y, lanes.tick.h, lanes.tick.c, 2));
+
+  // lazo principal: base, OLED, teclado, y muescas cuando corre una ISR
+  const ml = lanes.main;
+  ctx.fillStyle = C.pc + '30'; ctx.fillRect(x0, ml.y, pw, ml.h);
+  M6_T.main.forEach(m => {
+    if (m.kind === 'oled') {
+      bar(m.start, m.end, ml.y, ml.h, 'rgba(239,68,68,0.45)');
+      if (vis(m.start, m.end) && X(m.end) - X(m.start) > 150) {
+        ctx.fillStyle = txtCol(); ctx.font = '10px system-ui'; ctx.textAlign = 'left';
+        ctx.fillText('OLED: I2C bloqueante (≈92 ms)', Math.max(X(m.start), x0) + 6, ml.y + 14);
+      }
+    } else bar(m.start, m.end, ml.y, ml.h, C.pc, 2);
+  });
+  const dark = isLight() ? 'rgba(248,250,252,0.95)' : 'rgba(8,13,26,0.95)';
+  M6_T.isrIntervals.forEach(iv => bar(iv[0], iv[1], ml.y, ml.h, dark, 1));
+  ctx.restore();
+
+  ctx.font = '10px system-ui'; ctx.textAlign = 'left'; ctx.fillStyle = dimCol();
+  ctx.fillText('Barra rayada = ISR pendiente (llegó mientras corría otra de igual prioridad) · muescas oscuras en main() = main detenido por una ISR', 10, h - 10);
+
+  requestAnimationFrame(drawM6);
+}
+
+/* =========================================================================
+   MODULO 7: GLOSARIO Y AUTOEVALUACION
+   ========================================================================= */
+const glossaryData = {
+  'CDC': 'Communication Device Class: especificación de usb.org para dispositivos de comunicaciones (módems, redes, puertos serie).',
+  'ACM': 'Abstract Control Model: subclase de CDC que emula un puerto serie clásico sobre USB con endpoints bulk (datos) y de interrupción (notificaciones).',
+  'Endpoint': 'Buzón direccionable dentro del periférico USB. En tu firmware: EP0 control; EP1 OUT (0x01) y EP1 IN (0x81) bulk de 64 B; EP2 IN (0x82) interrupt de 8 B.',
+  'Bulk': 'Tipo de transferencia USB para grandes volúmenes de datos sin pérdida (CRC y reintentos), pero sin latencia garantizada: usa el ancho de banda que sobre.',
+  'NAK': 'Negative Acknowledgement: respuesta de hardware cuando un endpoint no tiene datos o está ocupado. No es un error; es el control de flujo natural del USB.',
+  'Descriptor USB': 'Estructura de datos estática en la flash del micro que le dice al host quién es el dispositivo (clase, endpoints, consumo).',
+  'Enumeración': 'Secuencia inicial al enchufar el cable: reset, lectura de descriptores, asignación de dirección y selección de configuración.',
+  'Ring buffer': 'Buffer circular en memoria contigua. Desacopla un productor a ritmo fijo (DMA del I2S) de un consumidor irregular (USB).',
+  'Zero-copy': 'El USB lee directamente del array del ring sin copiar a un buffer intermedio; por eso esa zona no se puede liberar hasta que termina la transferencia.',
+  'head / tail': 'Contadores libres de bytes escritos y bytes confirmados. La posición real en el array es contador & (RING_SIZE−1).',
+  'seq': 'Contador de tramas de 8 bits. La PC lo usa para contar pérdidas: (seq − último − 1) & 0xFF.',
+  'Little-endian': 'Orden de bytes donde el menos significativo va primero. Así viajan n (16 bits) y cada muestra de 24 bits.',
+  'Complemento a 2': 'Representación de enteros con signo: el bit más alto es el signo. Para 24 bits: si bit 23 = 1, el valor es raw − 2^24.',
+  'PRIMASK': 'Registro del Cortex-M que enmascara las interrupciones configurables. Se usa en secciones críticas cortas (__disable_irq).',
+  'Pendiente (pending)': 'Una interrupción que llegó mientras corría otra de igual o mayor prioridad: espera su turno; no hay anidamiento entre prioridades iguales.',
+  'GIL': 'Global Interpreter Lock de CPython: solo un hilo ejecuta bytecode a la vez. Si la GUI retiene el GIL, el hilo lector se frena.'
+};
+const pillsContainer = $('glossaryPills');
+Object.keys(glossaryData).forEach(term => {
+  const btn = document.createElement('button');
+  btn.className = 'btn';
+  btn.style.fontSize = '0.78rem';
+  btn.textContent = term;
+  btn.onclick = () => { $('glossaryDef').innerHTML = `<strong>${esc(term)}:</strong> ${esc(glossaryData[term])}`; };
+  pillsContainer.appendChild(btn);
+});
+
+const quizQuestions = [
+  { q: '1. ¿Por qué cambiar el baudrate en Python (ej. ser.baudrate = 9600) no reduce la velocidad de transferencia del STM32?',
+    opts: ['Porque el cable USB es de fibra óptica y no responde a la tensión.',
+      'Porque SET_LINE_CODING llega al micro pero CDC_Control_FS la ignora por completo; los datos viajan a 12 Mbit/s nativos.',
+      'Porque pyserial bloquea el cambio de baudrate si la GUI está abierta.',
+      'Porque el driver usbser.sys solo admite 115200 baudios.'],
+    ans: 1, exp: 'En USB CDC no hay señal UART. El pedido SET_LINE_CODING llega por EP0, pero CDC_Control_FS tiene ese caso vacío y retorna USBD_OK sin tocar ningún registro.' },
+  { q: '2. ¿Por qué una trama de audio perdida solo puede deberse a que el ring buffer se llenó, y no a una falla en el cable USB?',
+    opts: ['Porque el bus USB detecta errores con CRC16 y reintenta por hardware: un paquete corrupto se retransmite hasta que el host confirma con ACK.',
+      'Porque el códec PCM3060 guarda los datos en flash.',
+      'Porque el cable USB tiene checksum en el conector.',
+      'Porque Windows descarta el ruido de alta frecuencia.'],
+    ans: 0, exp: 'Las transferencias bulk garantizan entrega sin errores mediante ACK y reintentos (USB 2.0, cap. 8). Si faltan tramas, es porque el STM32 las descartó al no tener lugar en el ring.' },
+  { q: '3. En stream.c, ¿por qué tail avanza en stream_tx_done() y NO en stream_kick()?',
+    opts: ['Porque tail representa una dirección de flash.',
+      'Porque es zero-copy: el USB lee directo del ring; si tail avanzara al arrancar, el DMA podría sobrescribir memoria que el USB aún no terminó de transmitir.',
+      'Porque C no permite sumar a variables volátiles antes de una función.',
+      'Para evitar que GCC optimice el código con -O3.'],
+    ans: 1, exp: 'CDC_Transmit_FS recibe un puntero al ring. La zona entre tail y tail+inflight tiene que quedar intacta hasta que CDC_TransmitCplt_FS confirma.' },
+  { q: '4. Si los datos pendientes cruzan el final físico del array ring[], ¿por qué se hacen dos transferencias USB?',
+    opts: ['Porque CDC_Transmit_FS recibe un puntero y un largo contiguos: no puede dar la vuelta al inicio del array en una sola llamada.',
+      'Porque el estándar USB prohíbe transferencias de más de 1542 bytes.',
+      'Porque el OTG_FS solo lee direcciones pares.',
+      'Porque la RAM del STM32 está en dos bancos físicos.'],
+    ans: 0, exp: 'Un puntero accede a memoria lineal. kick calcula len = RING_SIZE − idx hasta el borde; el resto sale en la siguiente transferencia desde el índice 0 (el contador "bloques cortados" del módulo 2).' },
+  { q: '5. Si el DMA y la interrupción USB tienen ambas prioridad NVIC 0, ¿qué pasa si el USB pide servicio mientras corre el callback del DMA?',
+    opts: ['El micro entra en HardFault.',
+      'La interrupción USB queda pendiente y entra cuando termina la ISR del DMA; no hay anidamiento entre prioridades iguales.',
+      'El USB aborta la transferencia actual.',
+      'El Cortex-M4 alterna entre ambas ciclo a ciclo.'],
+    ans: 1, exp: 'Una interrupción solo puede interrumpir a otra de prioridad numéricamente menor (más urgente). Con igual prioridad se ejecutan por orden de llegada. Es la barra rayada del módulo 6.' },
+  { q: '6. ¿Por qué el refresco del OLED por I2C (~92 ms bloqueantes en main) no rompe la captura de audio?',
+    opts: ['Porque el OLED funciona por Bluetooth.',
+      'Porque las interrupciones del DMA y del USB (nivel 0) interrumpen al lazo principal sin esperar a que termine el I2C.',
+      'Porque el audio usa un DMA exclusivo.',
+      'Porque 92 ms es menor que 2,62 ms.'],
+    ans: 1, exp: 'main corre en modo thread; cuando el DMA o el USB piden servicio, el NVIC suspende main, atiende la ISR y devuelve el control. El costo es que main (teclado, comandos, cambios de amplitud) se atrasa.' },
+  { q: '7. ¿Por qué se puede mandar tramas de 1542 B por paquetes de 64 B sin romper los mensajes en la PC?',
+    opts: ['Porque el USB CDC emula un flujo continuo de bytes; el hilo lector acumula en un bytearray y el parser busca la marca AA 55.',
+      'Porque cada paquete de 64 B lleva su propio encabezado IP.',
+      'Porque Windows arma un archivo temporal.',
+      'Porque pyserial solo lee múltiplos de 1542 bytes.'],
+    ans: 0, exp: 'Los límites de paquete y de transferencia USB son invisibles para la aplicación serie. Reconstruir las tramas es trabajo del parser.' },
+  { q: '8. ¿Qué hace el STM32 a nivel USB cuando el host pide datos pero no hay nada listo?',
+    opts: ['Baja el pin RTS del conector.',
+      'Responde NAK al token IN del host.',
+      'Envía una trama de audio con ceros.',
+      'Se desconecta del bus quitando el pull-up de D+.'],
+    ans: 1, exp: 'El hardware del OTG_FS contesta NAK. El host entiende "sin datos" y reintenta más tarde.' }
+];
+const quizBox = $('quizContainer');
+quizQuestions.forEach((item, qIdx) => {
+  const qDiv = document.createElement('div');
+  qDiv.className = 'quiz-question';
+  qDiv.innerHTML = `<strong>${esc(item.q)}</strong><div class="quiz-options"></div><div class="quiz-exp" id="qexp_${qIdx}"></div>`;
+  const optBox = qDiv.querySelector('.quiz-options');
+  item.opts.forEach((optText, oIdx) => {
+    const btn = document.createElement('button');
+    btn.className = 'quiz-opt';
+    btn.textContent = optText;
+    btn.onclick = () => {
+      const all = optBox.querySelectorAll('.quiz-opt');
+      all.forEach(b => { b.disabled = true; });
+      const exp = $('qexp_' + qIdx);
+      exp.style.display = 'block';
+      if (oIdx === item.ans) { btn.classList.add('correct'); exp.innerHTML = `<strong style="color:var(--fw-color);">&check; ¡Correcto!</strong> ${esc(item.exp)}`; }
+      else { btn.classList.add('incorrect'); all[item.ans].classList.add('correct'); exp.innerHTML = `<strong style="color:var(--danger-color);">&cross; Incorrecto.</strong> ${esc(item.exp)}`; }
+    };
+    optBox.appendChild(btn);
+  });
+  quizBox.appendChild(qDiv);
+});
+
+/* =========================================================================
+   ARRANQUE
+   ========================================================================= */
+updateM1Detail();
+requestAnimationFrame(drawM1);
+resetM2();
+requestAnimationFrame(drawM2);
+switchMod4Tab('stack');
+(function () {
+  const sel = $('m5Scenario');
+  sel.innerHTML = Object.keys(M5_SCENARIOS).map(k => `<option value="${k}">${esc(M5_SCENARIOS[k].label)}</option>`).join('');
+  m5Load('normal');
+})();
+initM6Stats();
+updateM6();
+requestAnimationFrame(drawM6);
+</script>
+</body>
+</html>

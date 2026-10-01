@@ -76,12 +76,14 @@ void stream_push_audio(const uint16_t *f, uint16_t frames)
 void stream_push_text(const char *txt)
 {
     uint16_t n = (uint16_t)strlen(txt);
-
+    uint32_t primask = __get_PRIMASK();
+    __disable_irq();
     if (begin_frame(STREAM_TYPE_TEXT, n, n))
     {
         for (uint16_t i = 0; i < n; i++)
             ring_put((uint8_t)txt[i]);
     }
+    __set_PRIMASK(primask);
     stream_kick();
 }
 
