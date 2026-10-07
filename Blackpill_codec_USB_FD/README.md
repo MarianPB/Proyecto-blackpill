@@ -227,3 +227,12 @@ comandos PC -> STM32 e interrupciones. Los parámetros marcados como "supuestos"
 - No se pudo compilar ni probar en hardware desde acá (no hay toolchain ARM instalada).
   Se verificó la sintaxis con gcc y el parser/visor de la PC con datos simulados.
 - Hasta que hagas los pasos de arriba en el MX, una regeneración desde el `.ioc` viejo volvería a dejar el I2S en half duplex.
+
+## Capturas de la app con datos simulados
+
+`capturas_app_simulada/` contiene imágenes de `pc/comandos.py` y del visor del ADC corriendo contra un STM32
+simulado (sin hardware, sin tocar la app). `serial_falso.py` reemplaza a pyserial: entiende los comandos de texto
+y manda tramas `0xAA 0x55` a 97656.25 Hz, con el ADC en lazo cerrado con el DAC (más ruido, zumbido de 50 Hz y
+un poco de 2.º armónico). **Las señales son sintéticas, no mediciones del codec.**
+Para regenerar las imágenes: `python capturas_app_simulada/generar_capturas.py` (solo Windows; necesita
+numpy, matplotlib y pillow). Salen en `capturas_app_simulada/imagenes/`.

@@ -1,0 +1,395 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Anatomía de la trama STM32 a PC</title>
+<style>
+:root{
+  --bg:#0b0f19;--surface:#131d31;--surface-2:#1c2b46;--border:#243553;
+  --text:#f1f5f9;--muted:#94a3b8;--dim:#64748b;
+  --fw:#10b981;--usb:#0284c7;--pc:#8b5cf6;--warn:#f59e0b;--danger:#ef4444;
+  --mono:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+  --sans:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+}
+body.light{
+  --bg:#f8fafc;--surface:#ffffff;--surface-2:#f1f5f9;--border:#cbd5e1;
+  --text:#0f172a;--muted:#475569;--dim:#94a3b8;
+  --fw:#047857;--usb:#0369a1;--pc:#6d28d9;--warn:#b45309;--danger:#dc2626;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:var(--bg);color:var(--text);font-family:var(--sans);line-height:1.5;padding:16px 16px 60px}
+.wrap{max-width:1100px;margin:0 auto;display:flex;flex-direction:column;gap:18px}
+.top{display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap}
+h1{font-size:1.25rem}
+h2{font-size:1.05rem;margin-bottom:6px}
+.card{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:16px;display:flex;flex-direction:column;gap:12px}
+.note{background:var(--surface-2);border-left:4px solid var(--usb);border-radius:0 8px 8px 0;padding:10px 14px;font-size:.9rem;color:var(--muted)}
+.note b,.note strong{color:var(--text)}
+.warn{border-left-color:var(--warn)}
+.btn{background:var(--surface-2);color:var(--text);border:1px solid var(--border);padding:5px 12px;border-radius:6px;font-size:.82rem;font-weight:600;cursor:pointer}
+.btn:hover{background:var(--border)}
+.btn.primary{background:var(--usb);border-color:var(--usb);color:#fff}
+.row{display:flex;flex-wrap:wrap;gap:12px;align-items:flex-end}
+.field{display:flex;flex-direction:column;gap:3px;font-size:.78rem;color:var(--muted)}
+input,select{background:var(--surface-2);color:var(--text);border:1px solid var(--border);border-radius:6px;padding:5px 8px;font-size:.88rem;font-family:var(--mono)}
+input[type=number]{width:130px}
+input[type=text]{width:190px}
+table{width:100%;border-collapse:collapse;font-size:.82rem}
+th,td{border:1px solid var(--border);padding:5px 8px;text-align:left;vertical-align:top}
+th{background:var(--surface-2);color:var(--muted);font-weight:600}
+code,.mono{font-family:var(--mono);font-size:.82rem}
+.scroll{overflow-x:auto}
+.hex{display:flex;flex-wrap:wrap;gap:5px;font-family:var(--mono);font-size:.85rem}
+.b{padding:4px 7px;border-radius:5px;cursor:pointer;border:2px solid transparent;user-select:none}
+.b.sync{background:var(--warn);color:#000}
+.b.tipo{background:var(--fw);color:#fff}
+.b.seq{background:var(--usb);color:#fff}
+.b.n{background:var(--pc);color:#fff}
+.b.L{background:var(--surface-2);border-color:var(--fw)}
+.b.R{background:var(--surface-2);border-color:var(--usb)}
+.b.txt{background:var(--surface-2);border-color:var(--pc)}
+.b.more{background:none;border:1px dashed var(--border);color:var(--muted);cursor:default}
+.b.sel{outline:2px solid var(--text)}
+.sep{border-left:2px solid var(--border);margin:0 3px}
+.info{background:var(--surface-2);border:1px solid var(--border);border-radius:8px;padding:10px;font-size:.86rem;min-height:56px}
+.legend{display:flex;flex-wrap:wrap;gap:8px;font-size:.75rem}
+.legend span{padding:2px 8px;border-radius:999px}
+.ok{color:var(--fw);font-weight:700}
+.bad{color:var(--danger);font-weight:700}
+.bit-sign{color:var(--danger);font-weight:700}
+.pad{color:var(--dim)}
+.log{max-height:230px;overflow:auto;font-family:var(--mono);font-size:.78rem;background:var(--surface-2);border:1px solid var(--border);border-radius:8px;padding:8px}
+.log div{padding:1px 0}
+.log .cur{background:rgba(245,158,11,.25)}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+@media(max-width:760px){.grid2{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+<div class="wrap">
+<div class="top">
+  <h1>Anatomía de la trama (STM32 → PC)</h1>
+  <button class="btn" id="themeBtn">Modo claro</button>
+</div>
+
+<section class="card" id="mod3">
+  <h2>3. Cómo está construida cada trama, byte por byte</h2>
+  <div class="note"><strong>Qué vas a ver:</strong> el formato exacto que arma <code>stream.c</code> y que decodifica <code>visor_adc.py</code>, con cada byte explicado. Todo lo de abajo sale del código real; lo que es interpretación mía está marcado como tal.</div>
+
+  <!-- A. ANATOMIA -->
+  <h2 style="margin-top:6px">A. Encabezado de 6 bytes (igual para audio y texto)</h2>
+  <div class="scroll"><table>
+    <tr><th>Offset</th><th>Tamaño</th><th>Campo</th><th>Codificación / valores</th><th>Firmware (<code>begin_frame</code>)</th><th>Python (<code>_procesar</code>)</th></tr>
+    <tr><td>0</td><td>1</td><td>sync 0</td><td>constante <code>0xAA</code> = <code>10101010</code></td><td><code>ring_put(STREAM_SYNC0)</code></td><td><code>buf.find(SYNC)</code> con <code>SYNC = b"\xAA\x55"</code></td></tr>
+    <tr><td>1</td><td>1</td><td>sync 1</td><td>constante <code>0x55</code> = <code>01010101</code></td><td><code>ring_put(STREAM_SYNC1)</code></td><td>(ídem)</td></tr>
+    <tr><td>2</td><td>1</td><td>tipo</td><td><code>0x01</code> audio · <code>0x02</code> texto. Cualquier otro valor se considera falso sincronismo.</td><td><code>ring_put(type)</code></td><td><code>tipo = buf[2]</code></td></tr>
+    <tr><td>3</td><td>1</td><td>seq</td><td>entero sin signo de 8 bits. Sube 1 por cada trama, <b>incluidas las descartadas</b>, y da la vuelta <code>255 → 0</code>.</td><td><code>ring_put(seq++)</code> (y <code>seq++</code> al descartar)</td><td><code>seq = buf[3]</code></td></tr>
+    <tr><td>4–5</td><td>2</td><td>n</td><td>entero sin signo de 16 bits, <b>little-endian</b>: primero el byte bajo, después el alto. Audio: cantidad de <i>frames</i>. Texto: cantidad de <i>caracteres</i>.</td><td><code>ring_put(n &amp; 0xFF); ring_put(n &gt;&gt; 8)</code></td><td><code>n = buf[4] | (buf[5] &lt;&lt; 8)</code></td></tr>
+    <tr><td>6…</td><td>audio: n×6<br>texto: n</td><td>payload</td><td>audio: por frame <code>[L0 L1 L2 R0 R1 R2]</code>, 24 bits con signo por canal, byte menos significativo primero. Texto: ASCII, un byte por carácter, sin terminador.</td><td><code>ring_put(...)</code> en <code>stream_push_audio</code> / <code>stream_push_text</code></td><td><code>payload = buf[HDR:HDR+largo]</code></td></tr>
+  </table></div>
+  <div class="note">Tamaños: trama de audio = 6 + 256×6 = <b>1542 B</b> (una cada 2,62 ms). Trama de texto = 6 + n (por ejemplo <code>PONG</code> = 10 B). Sin checksum: el USB ya protege el cable con CRC y reintentos; el único control propio es <code>seq</code>.</div>
+
+  <!-- B. CONSTRUCTOR -->
+  <h2 style="margin-top:10px">B. Constructor interactivo: armá una trama y mirá cómo se codifica</h2>
+  <div class="row">
+    <div class="field">Tipo
+      <select id="fTipo"><option value="audio">0x01 audio</option><option value="texto">0x02 texto</option></select></div>
+    <div class="field">seq (0–255)<input type="number" id="fSeq" min="0" max="255" value="42"></div>
+    <div class="field" id="boxN">n (frames)<input type="number" id="fN" min="1" max="4096" value="256"></div>
+    <div class="field" id="boxL">Muestra L (entero 24 bits con signo)<input type="number" id="fL" min="-8388608" max="8388607" value="5649426"></div>
+    <div class="field" id="boxR">Muestra R<input type="number" id="fR" min="-8388608" max="8388607" value="-4530946"></div>
+    <div class="field" id="boxT" style="display:none">Texto (ASCII)<input type="text" id="fT" maxlength="16" value="PONG"></div>
+  </div>
+  <div class="row" id="presets">
+    <span class="field">Presets:</span>
+    <button class="btn" data-l="0" data-r="0">0 (silencio)</button>
+    <button class="btn" data-l="4194304" data-r="-4194304">+0,5 / −0,5</button>
+    <button class="btn" data-l="8388607" data-r="-8388608">+máx / −máx</button>
+    <button class="btn" data-l="-1" data-r="1">−1 / +1 (1 LSB)</button>
+    <button class="btn" data-l="5649426" data-r="-4530946">ejemplo</button>
+  </div>
+  <div class="legend">
+    <span class="b sync" style="cursor:default">sync</span><span class="b tipo" style="cursor:default">tipo</span>
+    <span class="b seq" style="cursor:default">seq</span><span class="b n" style="cursor:default">n</span>
+    <span class="b L" style="cursor:default">canal L</span><span class="b R" style="cursor:default">canal R</span><span class="b txt" style="cursor:default">texto</span>
+  </div>
+  <div class="hex" id="hexOut"></div>
+  <div class="mono" id="sizeOut" style="color:var(--muted)"></div>
+  <div class="info" id="byteInfo">Pasá el mouse o tocá un byte para ver qué significa.</div>
+
+  <div id="pipeBox">
+    <div class="row" style="margin-bottom:6px">
+      <h2 style="margin:0" id="pipeTitle">De la señal analógica al byte: recorrido de una muestra</h2>
+      <div class="field" id="boxCanal">Canal<select id="fCanal"><option value="L">L</option><option value="R">R</option></select></div>
+    </div>
+    <div class="scroll" id="pipeOut"></div>
+  </div>
+
+  <!-- C. LITTLE ENDIAN -->
+  <h2 style="margin-top:10px">C. Little-endian: por qué <code>n = 256</code> viaja como <code>00 01</code></h2>
+  <div class="grid2">
+    <div class="info" id="leOut"></div>
+    <div class="note warn">Si el receptor lo leyera al revés (big-endian) vería <code id="leWrong"></code> en lugar del valor real. En un flujo continuo eso desalinea todo lo que sigue. El mismo criterio aplica a las muestras de 24 bits: el byte <b>menos</b> significativo sale primero (<code>L0</code>).</div>
+  </div>
+
+  <!-- D. SEQ -->
+  <h2 style="margin-top:10px">D. Cómo se detectan las tramas perdidas con <code>seq</code></h2>
+  <div class="row">
+    <div class="field">Último seq recibido<input type="number" id="sLast" min="0" max="255" value="254"></div>
+    <div class="field">seq de la trama que llegó<input type="number" id="sNow" min="0" max="255" value="1"></div>
+    <button class="btn" data-sl="10" data-sn="11">sin pérdida</button>
+    <button class="btn" data-sl="10" data-sn="13">pierde 2</button>
+    <button class="btn" data-sl="254" data-sn="1">da la vuelta (255 y 0 perdidas)</button>
+    <button class="btn" data-sl="10" data-sn="10">mismo seq repetido</button>
+  </div>
+  <div class="info" id="seqOut"></div>
+
+  <!-- E. PARSER -->
+  <h2 style="margin-top:10px">E. El parser de Python paso a paso (<code>Receptor._procesar</code>)</h2>
+  <div class="note">El flujo del COM no tiene límites de mensaje: llegan trozos de cualquier tamaño. Esta demo usa un flujo con basura al principio, un falso sincronismo, una trama de texto cortada entre dos lecturas y una trama de audio <b>con una trama perdida antes</b> (seq 6 nunca llega). Es la misma lógica que el código real (buscar <code>AA 55</code>, validar tipo y n, esperar la trama completa, contar saltos de seq).</div>
+  <div class="row">
+    <button class="btn primary" id="pStep">Paso ▶</button>
+    <button class="btn" id="pAll">Ejecutar todo</button>
+    <button class="btn" id="pReset">Reiniciar</button>
+    <span class="mono" id="pStats" style="color:var(--muted)"></span>
+  </div>
+  <div class="info"><div class="mono" style="color:var(--muted)">bytearray del hilo lector:</div><div class="hex" id="pBuf" style="margin-top:4px"></div><div id="pMsg" style="margin-top:8px"></div></div>
+  <div class="log" id="pLog"></div>
+
+  <!-- F. LIMITES -->
+  <h2 style="margin-top:10px">F. Límites del formato (lo que conviene saber)</h2>
+  <div class="note warn"><ul style="margin-left:1.1rem">
+    <li><b>seq de 8 bits es ambiguo cada 256 tramas:</b> si se pierden exactamente 256 tramas seguidas (~0,67 s de audio) o un múltiplo, <code>perdidas</code> da 0.</li>
+    <li><b>Sin checksum:</b> una corrupción dentro del payload no se detecta (el USB ya la evita en el cable; si ocurriera en RAM, no habría aviso).</li>
+    <li><b><code>AA 55</code> puede aparecer dentro del audio</b> (son dos bytes de una muestra cualquiera). No molesta mientras el parser va leyendo trama por trama; solo importa al <i>resincronizar</i> tras una pérdida, y por eso se validan tipo y n.</li>
+    <li><b>Relleno en el bus I2S:</b> el slot es de 32 bits y la muestra de 24; los 8 bits de abajo no se usan y el firmware los descarta con <code>&gt;&gt; 8</code>.</li>
+    <li><b>Límites que impone Python:</b> audio <code>0 &lt; n ≤ 4096</code> y texto <code>n ≤ 64</code> (<code>MAX_FRAMES</code>, <code>MAX_TEXTO</code>). El firmware no limita el texto, pero sus mensajes son cortos.</li>
+    <li><b>Por qué 0xAA 0x55:</b> <i>(interpretación mía, no está documentado en el código)</i> es un patrón alternado de bits, elección habitual para sincronismo.</li>
+  </ul></div>
+</section>
+</div>
+
+<script>
+// ==== PURE START (sin DOM; probado aparte contra una implementación independiente)
+const HDR = 6;
+const hex2 = b => (b & 0xFF).toString(16).toUpperCase().padStart(2, '0');
+const hexN = (v, d) => (v >>> 0).toString(16).toUpperCase().padStart(d, '0');
+const grp8 = (v, bits) => (v >>> 0).toString(2).padStart(bits, '0').match(/.{1,8}/g).join(' ');
+
+// Recorrido de una muestra: ADC -> slot I2S -> 2 halfwords -> firmware -> 3 bytes -> Python
+function encodeSampleSteps(v) {
+  v = Math.max(-8388608, Math.min(8388607, Math.trunc(v)));
+  const u24 = v & 0xFFFFFF;                    // complemento a 2 en 24 bits
+  const word32 = (u24 << 8) >>> 0;             // alineada a la izquierda en el slot de 32 bits
+  const hi = word32 >>> 16, lo = word32 & 0xFFFF;   // f[0], f[1] en rx_buf (halfwords)
+  const joined = ((hi << 16) | lo) | 0;        // (int32_t)(((uint32_t)f[0] << 16) | f[1])
+  const l = joined >> 8;                       // desplazamiento aritmetico: extiende el signo
+  const b0 = l & 0xFF, b1 = (l >> 8) & 0xFF, b2 = (l >> 16) & 0xFF;   // (uint8_t)l, l>>8, l>>16
+  const raw = b0 | (b1 << 8) | (b2 << 16);     // Python: a[:,0] | (a[:,1]<<8) | (a[:,2]<<16)
+  const dec = (raw ^ 0x800000) - 0x800000;     // Python: (l ^ 0x800000) - 0x800000
+  return { v, u24, word32, hi, lo, joined, l, b0, b1, b2, raw, dec, norm: dec / 8388608 };
+}
+
+function lostFrames(last, now) { return (now - last - 1) & 0xFF; }
+
+const ascii = s => [...s].map(c => { const k = c.charCodeAt(0); return k < 128 ? k : 63; });
+
+function frameBytes(tipo, seq, payload, n) {
+  return [0xAA, 0x55, tipo, seq & 0xFF, n & 0xFF, (n >> 8) & 0xFF, ...payload];
+}
+
+// Misma logica que Receptor._procesar; registra cada decision
+function runParser(chunks) {
+  const log = []; let buf = [], ultimo = null, perdidas = 0, tramas = 0;
+  const snap = (msg, kind) => log.push({ buf: buf.slice(), msg, kind, perdidas, tramas });
+  chunks.forEach((ch, ci) => {
+    buf.push(...ch);
+    snap(`Lectura ${ci + 1}: llegan ${ch.length} bytes del COM y se agregan al bytearray.`, 'chunk');
+    for (;;) {
+      let i = -1;
+      for (let k = 0; k + 1 < buf.length; k++) if (buf[k] === 0xAA && buf[k + 1] === 0x55) { i = k; break; }
+      if (i < 0) {
+        const d = Math.max(buf.length - 1, 0);
+        if (d > 0) { buf.splice(0, d); snap(`No hay AA 55: se descartan ${d} bytes y se conserva el último por si es el 0xAA de un encabezado partido.`, 'drop'); }
+        else snap('No hay AA 55 todavía: se espera la próxima lectura.', 'wait');
+        break;
+      }
+      if (i > 0) { buf.splice(0, i); snap(`Se descartan ${i} bytes de basura antes del sincronismo AA 55.`, 'drop'); }
+      if (buf.length < HDR) { snap('Hay AA 55 pero faltan bytes para el encabezado de 6: se espera.', 'wait'); break; }
+      const tipo = buf[2], seq = buf[3], n = buf[4] | (buf[5] << 8);
+      let largo;
+      if (tipo === 1 && n > 0 && n <= 4096) largo = n * 6;
+      else if (tipo === 2 && n <= 64) largo = n;
+      else {
+        buf.splice(0, 1);
+        snap(`Falso sincronismo: tipo=0x${hex2(tipo)} n=${n} no es válido. Se descarta 1 byte y se sigue buscando.`, 'false');
+        continue;
+      }
+      if (buf.length < HDR + largo) { snap(`Encabezado válido (tipo=0x${hex2(tipo)}, seq=${seq}, n=${n}) pero faltan ${HDR + largo - buf.length} de ${largo} bytes de payload: se espera la próxima lectura.`, 'wait'); break; }
+      const payload = buf.slice(HDR, HDR + largo);
+      buf.splice(0, HDR + largo);
+      let extra = '';
+      if (ultimo !== null) { const p = lostFrames(ultimo, seq); perdidas += p; extra = p ? ` ¡Salto de seq: último=${ultimo}, llegó ${seq} → ${p} trama(s) perdida(s)!` : ` seq continuo (${ultimo} → ${seq}).`; }
+      else extra = ' Primera trama: todavía no hay referencia de seq.';
+      ultimo = seq; tramas++;
+      if (tipo === 2) snap(`Trama de TEXTO completa: "${String.fromCharCode(...payload)}".${extra}`, 'frame');
+      else {
+        const L = ((payload[0] | (payload[1] << 8) | (payload[2] << 16)) ^ 0x800000) - 0x800000;
+        const R = ((payload[3] | (payload[4] << 8) | (payload[5] << 16)) ^ 0x800000) - 0x800000;
+        snap(`Trama de AUDIO completa (${n} frames). Primer frame: L=${L} (${(L / 8388608).toFixed(4)}), R=${R} (${(R / 8388608).toFixed(4)}).${extra}`, 'frame');
+      }
+    }
+  });
+  return log;
+}
+
+function demoStream() {
+  const garbage = [0x13, 0x77, 0xAA, 0x55, 0x07, 0x09, 0xFF, 0xFF];
+  const f1 = frameBytes(2, 5, ascii('PONG'), 4);
+  const audio = frameBytes(1, 7, [0x12, 0x34, 0x56, 0xFE, 0xDC, 0xBA, 0x00, 0x00, 0x40, 0x00, 0x00, 0xC0], 2);
+  const f3 = frameBytes(2, 8, ascii('OK'), 2);
+  const all = [...garbage, ...f1, ...audio, ...f3];
+  const sizes = [9, 6, 13, 8, 11, 7, 12], chunks = []; let p = 0, k = 0;
+  while (p < all.length) { const sz = sizes[k++ % sizes.length]; chunks.push(all.slice(p, p + sz)); p += sz; }
+  return chunks;
+}
+// ==== PURE END
+
+// ---------------- UI ----------------
+const $ = id => document.getElementById(id);
+const st = { tipo: 'audio', seq: 42, n: 256, L: 5649426, R: -4530946, txt: 'PONG', canal: 'L' };
+let frame = [];
+
+function buildFrame() {
+  const out = []; const add = (b, f, info) => out.push({ b: b & 0xFF, f, info });
+  const isA = st.tipo === 'audio';
+  const txt = isA ? '' : ascii(st.txt);
+  const n = isA ? st.n : txt.length;
+  add(0xAA, 'sync', 'Byte 0 · sync 0 = 0xAA (10101010). Constante: <code>ring_put(STREAM_SYNC0)</code>. El parser de Python busca este byte seguido de 0x55.');
+  add(0x55, 'sync', 'Byte 1 · sync 1 = 0x55 (01010101). Constante. Juntos forman la marca <code>AA 55</code> que permite reencontrar el inicio de una trama.');
+  add(isA ? 1 : 2, 'tipo', `Byte 2 · tipo = 0x${hex2(isA ? 1 : 2)} → ${isA ? 'audio: el payload son frames estéreo de 6 bytes' : 'texto: el payload son caracteres ASCII (respuesta a un comando)'}.`);
+  add(st.seq, 'seq', `Byte 3 · seq = ${st.seq & 0xFF} (0x${hex2(st.seq)}). Contador de 8 bits: <code>ring_put(seq++)</code>. La PC compara con el anterior para contar pérdidas.`);
+  add(n & 0xFF, 'n', `Byte 4 · n, parte BAJA = 0x${hex2(n & 0xFF)}. n = ${n} = 0x${hexN(n, 4)}. Little-endian: primero el byte bajo (<code>n &amp; 0xFF</code>).`);
+  add(n >> 8, 'n', `Byte 5 · n, parte ALTA = 0x${hex2(n >> 8)} (<code>n &gt;&gt; 8</code>). Python recompone <code>n = buf[4] | (buf[5] &lt;&lt; 8)</code> = ${n}.`);
+  if (isA) {
+    for (const [ch, val] of [['L', st.L], ['R', st.R]]) {
+      const s = encodeSampleSteps(val);
+      [[s.b0, 0, 'LSB: bits 7..0, <code>(uint8_t)l</code>'], [s.b1, 1, 'medio: bits 15..8, <code>(uint8_t)(l &gt;&gt; 8)</code>'], [s.b2, 2, 'MSB: bits 23..16 (incluye el signo), <code>(uint8_t)(l &gt;&gt; 16)</code>']]
+        .forEach(([b, k, d]) => add(b, ch, `Byte ${6 + (ch === 'L' ? 0 : 3) + k} · frame 0, canal ${ch}, byte ${k} (${d}). Muestra completa = ${s.dec} (0x${hexN(s.u24, 6)} en 24 bits).`));
+    }
+  } else {
+    txt.forEach((c, i) => add(c, 'txt', `Byte ${6 + i} · carácter ${i + 1} de ${n}: '${String.fromCharCode(c)}' = ASCII ${c} = 0x${hex2(c)}. Un byte por carácter, sin terminador.`));
+  }
+  return out;
+}
+
+function renderHex() {
+  frame = buildFrame();
+  const html = [];
+  frame.forEach((x, i) => {
+    if (i === 6) html.push('<span class="sep"></span>');
+    if (st.tipo === 'audio' && i === 12) html.push('<span class="sep"></span>');
+    html.push(`<span class="b ${x.f}" data-i="${i}" tabindex="0">${hex2(x.b)}</span>`);
+  });
+  if (st.tipo === 'audio') html.push(`<span class="b more">… ${st.n - 1} frames más (${(st.n - 1) * 6} B)</span>`);
+  $('hexOut').innerHTML = html.join('');
+  const total = st.tipo === 'audio' ? HDR + st.n * 6 : HDR + ascii(st.txt).length;
+  $('sizeOut').textContent = `Tamaño total de la trama: ${total} bytes` + (st.tipo === 'audio' ? ` = 6 de encabezado + ${st.n} frames × 6 B. Se muestra solo el primer frame; el firmware siempre manda n = 256.` : ` = 6 de encabezado + ${ascii(st.txt).length} caracteres.`);
+}
+
+function showInfo(i) {
+  document.querySelectorAll('#hexOut .b.sel').forEach(e => e.classList.remove('sel'));
+  const el = document.querySelector(`#hexOut .b[data-i="${i}"]`);
+  if (el) el.classList.add('sel');
+  $('byteInfo').innerHTML = frame[i] ? frame[i].info : '';
+}
+
+function renderPipe() {
+  if (st.tipo === 'texto') {
+    $('pipeTitle').textContent = 'Del texto al byte: codificación ASCII';
+    $('boxCanal').style.display = 'none';
+    const rows = ascii(st.txt).map(c => `<tr><td>'${String.fromCharCode(c)}'</td><td>${c}</td><td>0x${hex2(c)}</td><td class="mono">${(c).toString(2).padStart(8, '0')}</td></tr>`).join('');
+    $('pipeOut').innerHTML = `<table><tr><th>Carácter</th><th>Código ASCII</th><th>Byte</th><th>Bits (el bit 7 es siempre 0 en ASCII)</th></tr>${rows}</table>
+      <div class="note" style="margin-top:8px">El firmware copia los caracteres tal cual (<code>ring_put((uint8_t)txt[i])</code>) y <b>no</b> agrega el <code>'\\0'</code> final: la longitud viaja en <code>n</code>. Python hace <code>payload.decode("ascii")</code>.</div>`;
+    return;
+  }
+  $('pipeTitle').textContent = 'De la señal analógica al byte: recorrido de una muestra';
+  $('boxCanal').style.display = '';
+  const v = st.canal === 'L' ? st.L : st.R;
+  const s = encodeSampleSteps(v);
+  const bits24 = grp8(s.u24, 24).replace(/^(.)/, '<span class="bit-sign">$1</span>');
+  const bits32 = grp8(s.word32, 32).replace(/^(.)/, '<span class="bit-sign">$1</span>').replace(/ ([01]{8})$/, ' <span class="pad">$1</span>');
+  const row = (n, donde, val, code) => `<tr><td><b>${n}</b></td><td>${donde}</td><td class="mono">${val}</td><td class="mono">${code}</td></tr>`;
+  $('pipeOut').innerHTML = `<table>
+    <tr><th>#</th><th>Dónde</th><th>Valor</th><th>Código / regla</th></tr>
+    ${row(1, 'El ADC del PCM3060 entrega un entero de 24 bits con signo (complemento a 2)', `${s.v}<br>0x${hexN(s.u24, 6)}<br>${bits24}`, 'rango −8 388 608 … +8 388 607; el primer bit (rojo) es el signo')}
+    ${row(2, 'Bus I2S: slot de 32 bits, el MSB sale primero', `0x${hexN(s.word32, 8)}<br>${bits32}`, '24 bits de dato alineados a la izquierda + 8 bits de relleno (gris) que no se usan')}
+    ${row(3, 'DMA guarda el slot en <code>rx_buf</code> como 2 halfwords de 16 bits', `f[0] = 0x${hexN(s.hi, 4)}<br>f[1] = 0x${hexN(s.lo, 4)}`, 'la HAL usa halfwords; el byte bajo de f[1] es relleno')}
+    ${row(4, 'Firmware: <code>stream_push_audio</code> los une y desplaza', `unido = 0x${hexN(s.joined, 8)}<br>l = ${s.l} (0x${hexN(s.l, 8)})`, '(int32_t)(((uint32_t)f[0] &lt;&lt; 16) | f[1]) &gt;&gt; 8<br>el &gt;&gt; 8 con signo baja los 24 bits y <b>extiende el signo</b> a 32')}
+    ${row(5, 'Firmware: escribe 3 bytes en el ring, byte bajo primero', `b0 = 0x${hex2(s.b0)} (${s.b0.toString(2).padStart(8, '0')})<br>b1 = 0x${hex2(s.b1)} (${s.b1.toString(2).padStart(8, '0')})<br>b2 = 0x${hex2(s.b2)} (${s.b2.toString(2).padStart(8, '0')})`, 'ring_put((uint8_t)l);<br>ring_put((uint8_t)(l &gt;&gt; 8));<br>ring_put((uint8_t)(l &gt;&gt; 16));')}
+    ${row(6, 'Python: <code>_guardar_audio</code> rearma y extiende el signo', `raw = 0x${hexN(s.raw, 6)} = ${s.raw}<br>con signo = ${s.dec}<br>normalizado = ${s.norm.toFixed(6)}`, 'l = a[:,0] | (a[:,1] &lt;&lt; 8) | (a[:,2] &lt;&lt; 16)<br>l = ((l ^ 0x800000) − 0x800000) / FULL_SCALE<br>FULL_SCALE = 2<sup>23</sup> = 8 388 608')}
+  </table>
+  <div style="margin-top:6px">Verificación: valor recuperado en la PC ${s.dec === s.v ? '<span class="ok">= valor original ✓</span>' : '<span class="bad">≠ valor original</span>'}. El truco <code>(x ^ 0x800000) − 0x800000</code> equivale a "si el bit 23 está en 1, restar 2<sup>24</sup>".</div>`;
+}
+
+function renderLE() {
+  const n = st.tipo === 'audio' ? st.n : ascii(st.txt).length;
+  const lo = n & 0xFF, hi = (n >> 8) & 0xFF;
+  $('leOut').innerHTML = `n = ${n} = 0x${hexN(n, 4)}<br>Bytes en el cable: <b class="mono">${hex2(lo)} ${hex2(hi)}</b> (bajo, alto)<br>Lectura correcta (little-endian): ${hex2(lo)} + ${hex2(hi)}·256 = <b>${lo | (hi << 8)}</b>`;
+  $('leWrong').textContent = String((lo << 8) | hi);
+}
+
+function renderSeq() {
+  const last = (+$('sLast').value) & 0xFF, now = (+$('sNow').value) & 0xFF;
+  const p = lostFrames(last, now);
+  const tms = (p * 2.62144).toFixed(1);
+  let txt = `<code>perdidas = (seq − último − 1) &amp; 0xFF = (${now} − ${last} − 1) &amp; 0xFF = ${now - last - 1} &amp; 0xFF = <b>${p}</b></code><br>`;
+  txt += p === 0 ? 'Sin pérdidas: el seq es el siguiente. <span class="bad">Ojo:</span> si se hubieran perdido exactamente 256 tramas seguidas (~0,67 s), el resultado sería idéntico y el parser no lo notaría.'
+    : now === last ? `<span class="bad">Mismo seq que la trama anterior:</span> el cálculo da 255. En este sistema no debería pasar (cada trama incrementa seq), así que indicaría un duplicado o una pérdida casi completa de la vuelta.`
+    : `Faltaron ${p} trama(s) ≈ ${tms} ms de audio. El <code>&amp; 0xFF</code> hace que funcione al dar la vuelta (255 → 0): ${now - last - 1 < 0 ? `la resta da ${now - last - 1}, que en 8 bits equivale a ${p}.` : 'no hubo vuelta en este caso.'}`;
+  $('seqOut').innerHTML = txt;
+}
+
+// parser paso a paso
+let plog = [], pi = 0;
+function renderParser() {
+  const cur = plog[Math.max(pi - 1, 0)];
+  const e = pi === 0 ? null : cur;
+  $('pBuf').innerHTML = e ? (e.buf.length ? e.buf.map(b => `<span class="b ${'txt'}" style="cursor:default">${hex2(b)}</span>`).join('') : '<span class="pad">(vacío)</span>') : '<span class="pad">(todavía no llegó nada)</span>';
+  $('pMsg').innerHTML = e ? e.msg : 'Tocá «Paso» para recibir la primera lectura.';
+  $('pStats').textContent = e ? `tramas válidas: ${e.tramas} · perdidas detectadas: ${e.perdidas}` : '';
+  $('pLog').innerHTML = plog.slice(0, pi).map((x, i) => `<div class="${i === pi - 1 ? 'cur' : ''}">${String(i + 1).padStart(2, '0')}. ${x.msg}</div>`).join('');
+  $('pLog').scrollTop = $('pLog').scrollHeight;
+  $('pStep').disabled = pi >= plog.length;
+}
+
+function renderAll() { renderHex(); renderPipe(); renderLE(); showInfo(0); }
+
+function readInputs() {
+  st.tipo = $('fTipo').value; st.seq = (+$('fSeq').value) & 0xFF;
+  st.n = Math.max(1, Math.min(4096, +$('fN').value || 256));
+  st.L = Math.trunc(+$('fL').value) || 0; st.R = Math.trunc(+$('fR').value) || 0;
+  st.txt = $('fT').value; st.canal = $('fCanal').value;
+  const isA = st.tipo === 'audio';
+  $('boxN').style.display = $('boxL').style.display = $('boxR').style.display = $('presets').style.display = isA ? '' : 'none';
+  $('boxT').style.display = isA ? 'none' : '';
+}
+
+['fTipo', 'fSeq', 'fN', 'fL', 'fR', 'fT', 'fCanal'].forEach(id => $(id).addEventListener('input', () => { readInputs(); renderAll(); }));
+$('presets').addEventListener('click', e => { const b = e.target.closest('button'); if (!b) return; $('fL').value = b.dataset.l; $('fR').value = b.dataset.r; readInputs(); renderAll(); });
+$('hexOut').addEventListener('mouseover', e => { const b = e.target.closest('.b[data-i]'); if (b) showInfo(+b.dataset.i); });
+$('hexOut').addEventListener('click', e => { const b = e.target.closest('.b[data-i]'); if (b) showInfo(+b.dataset.i); });
+$('hexOut').addEventListener('focusin', e => { const b = e.target.closest('.b[data-i]'); if (b) showInfo(+b.dataset.i); });
+['sLast', 'sNow'].forEach(id => $(id).addEventListener('input', renderSeq));
+document.querySelectorAll('button[data-sl]').forEach(b => b.addEventListener('click', () => { $('sLast').value = b.dataset.sl; $('sNow').value = b.dataset.sn; renderSeq(); }));
+$('pStep').addEventListener('click', () => { if (pi < plog.length) pi++; renderParser(); });
+$('pAll').addEventListener('click', () => { pi = plog.length; renderParser(); });
+$('pReset').addEventListener('click', () => { pi = 0; renderParser(); });
+$('themeBtn').addEventListener('click', () => { document.body.classList.toggle('light'); $('themeBtn').textContent = document.body.classList.contains('light') ? 'Modo oscuro' : 'Modo claro'; });
+
+plog = runParser(demoStream());
+readInputs(); renderAll(); renderSeq(); renderParser();
+</script>
+</body>
+</html>
