@@ -203,10 +203,14 @@ class Aplicacion:
 
         self.crear_interfaz()
 
-        # alto justo para que entre todo, sin pasarse de la pantalla (notebooks de 768/864 px)
+        # alto justo para que entre todo; si la pantalla es mas baja (notebooks de 768/864 px) la ventana
+        # se queda en el alto de la pantalla y el resto se alcanza con la barra de desplazamiento
         self.root.update_idletasks()
-        alto = min(self.root.winfo_reqheight() + 10, self.root.winfo_screenheight() - 80)
-        self.root.geometry(f"720x{alto}+20+0")
+        fijo = self.root.winfo_reqheight() - self.lienzo.winfo_reqheight()
+        chirp = max(0, self.panel_chirp_L.winfo_reqheight() - self.panel_fija_L.winfo_reqheight())   # el panel mas alto
+        alto = min(fijo + self.cuerpo.winfo_reqheight() + chirp + 10, self.root.winfo_screenheight() - 80)
+        ancho = max(720, self.cuerpo.winfo_reqwidth() + 24)
+        self.root.geometry(f"{ancho}x{alto}+20+0")
 
         # Marca la forma de onda por defecto (seno) en cada canal
 
@@ -307,7 +311,7 @@ class Aplicacion:
             side="left"
         )
 
-        # el visor va arriba: en pantallas bajas el panel del codec queda fuera de la ventana
+        # acceso al visor siempre a la vista, sin tener que bajar hasta el panel del codec
         ttk.Button(
             frame_conexion,
             text="Visor ADC",
@@ -330,12 +334,15 @@ class Aplicacion:
             pady=5
         )
 
+        # todo lo que sigue va dentro de self.cuerpo, que se puede desplazar si no entra en la pantalla
+        self.crear_zona_desplazable()
+
         # ====================================================
         # CANALES
         # ====================================================
 
         frame_canales = ttk.Frame(
-            self.root,
+            self.cuerpo,
             padding=10
         )
 
@@ -604,13 +611,65 @@ class Aplicacion:
 
 
     # ========================================================
+    # ZONA DESPLAZABLE (pantallas bajas)
+    # ========================================================
+
+    def crear_zona_desplazable(self):
+
+        contenedor = ttk.Frame(self.root)
+        contenedor.pack(fill="both", expand=True)
+
+        fondo = ttk.Style().lookup("TFrame", "background") or self.root.cget("bg")
+        self.lienzo = tk.Canvas(contenedor, highlightthickness=0, bg=fondo)
+        self.barra = ttk.Scrollbar(contenedor, orient="vertical", command=self.lienzo.yview)
+        self.lienzo.configure(yscrollcommand=self.barra.set)
+        self.lienzo.pack(side="left", fill="both", expand=True)
+
+        self.cuerpo = ttk.Frame(self.lienzo)
+        self.id_cuerpo = self.lienzo.create_window((0, 0), window=self.cuerpo, anchor="nw")
+        self.hay_barra = False
+
+        self.cuerpo.bind("<Configure>", self.ajustar_desplazamiento)
+        self.lienzo.bind("<Configure>", self.ajustar_desplazamiento)
+        self.root.bind_all("<MouseWheel>", self.rueda_del_mouse)
+
+
+    def ajustar_desplazamiento(self, event=None):
+
+        self.lienzo.itemconfigure(self.id_cuerpo, width=self.lienzo.winfo_width())
+        self.lienzo.configure(scrollregion=self.lienzo.bbox("all"))
+
+        # la barra solo aparece cuando el contenido no entra en la ventana
+        falta = self.cuerpo.winfo_reqheight() > self.lienzo.winfo_height() + 1
+        if falta and not self.hay_barra:
+            self.barra.pack(side="right", fill="y")
+        elif not falta and self.hay_barra:
+            self.barra.pack_forget()
+            self.lienzo.yview_moveto(0)
+        self.hay_barra = falta
+
+
+    def rueda_del_mouse(self, event):
+
+        # bind_all tambien recibe la rueda del visor (otra ventana) y de los desplegables
+        try:
+            if event.widget.winfo_toplevel() is not self.root or isinstance(event.widget, ttk.Combobox):
+                return
+        except AttributeError:
+            return
+
+        if self.hay_barra:
+            self.lienzo.yview_scroll(-1 if event.delta > 0 else 1, "units")
+
+
+    # ========================================================
     # FORMA DE ONDA Y MODO DE SALIDA
     # ========================================================
 
     def crear_extras(self):
 
         # --- forma de onda por canal ---
-        cont = ttk.Frame(self.root)
+        cont = ttk.Frame(self.cuerpo)
         cont.pack(pady=10)
 
         ttk.Label(
@@ -629,7 +688,7 @@ class Aplicacion:
 
         # --- señales de prueba de frecuencia fija (para THD): van aparte y en otro color ---
         fijas = tk.LabelFrame(
-            self.root, bg=FONDO_FIJAS, fg="#8A5300", font=("Arial", 9, "bold"),
+            self.cuerpo, bg=FONDO_FIJAS, fg="#8A5300", font=("Arial", 9, "bold"),
             text=" Señales de prueba con frecuencia FIJA (no usan la frecuencia del canal) ",
             padx=6, pady=4
         )
@@ -649,7 +708,7 @@ class Aplicacion:
         ).grid(row=2, column=0, columnspan=1 + len(FORMAS_FIJAS), sticky="w", pady=(4, 0))
 
         # --- modo de salida (diferencial / simple) ---
-        frame_salida = ttk.Frame(self.root)
+        frame_salida = ttk.Frame(self.cuerpo)
         frame_salida.pack(pady=8)
 
         ttk.Label(frame_salida, text="Salida:").pack(side="left", padx=5)
@@ -667,7 +726,7 @@ class Aplicacion:
         ).pack(side="left", padx=5)
 
         # --- entrada (ADC) / salida (DAC) del codec y visor ---
-        frame_adc = ttk.LabelFrame(self.root, text="Codec PCM3060", padding=8)
+        frame_adc = ttk.LabelFrame(self.cuerpo, text="Codec PCM3060", padding=8)
         frame_adc.pack(pady=8, padx=10, fill="x")
 
         self.adc_on = tk.IntVar(value=1)
