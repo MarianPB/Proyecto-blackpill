@@ -70,6 +70,9 @@ static void draw_icon(waveform_t w)
         case WAVE_SQUARE:   icon_square();   break;
         case WAVE_TRIANGLE: icon_triangle(); break;
         case WAVE_CHIRP:    icon_chirp();    break;
+        case WAVE_SINE_TAB:
+        case WAVE_TAB_FEA:
+        case WAVE_ACC_FEA:  icon_sine();     break;
         default: break;
     }
 }
@@ -81,7 +84,23 @@ static const char* wave_name(waveform_t w)
         case WAVE_SQUARE:   return "Cuadrada";
         case WAVE_TRIANGLE: return "Triang.";
         case WAVE_CHIRP:    return "Chirp";
+        case WAVE_SINE_TAB: return "1k TABLA";
+        case WAVE_MULTI:    return "Multitono";
+        case WAVE_TAB_FEA:  return "995 TABLA";
+        case WAVE_ACC_FEA:  return "995 PASO";
         default:            return "?";
+    }
+}
+
+// las ondas de prueba tienen frecuencia fija: en vez de la frecuencia del canal se muestra esta
+static const char* fixed_freq(waveform_t w)
+{
+    switch (w) {
+        case WAVE_SINE_TAB: return "1000 Hz fija";
+        case WAVE_MULTI:    return "60+7000 fija";
+        case WAVE_TAB_FEA:
+        case WAVE_ACC_FEA:  return "995.4 Hz fija";
+        default:            return 0;
     }
 }
 
@@ -116,6 +135,8 @@ void oled_show(uint8_t canal, waveform_t w, uint32_t freq_hz, uint8_t amp_pct,
     ssd1306_SetCursor(0, 34);
     if (mode == KP_MODE_FREQ && escribiendo)
         sprintf(buf, ">F: %s_", input);
+    else if (fixed_freq(w))
+        sprintf(buf, "%cF: %s", (mode == KP_MODE_FREQ) ? '>' : ' ', fixed_freq(w));
     else
         sprintf(buf, "%cF: %lu Hz", (mode == KP_MODE_FREQ) ? '>' : ' ', (unsigned long)freq_hz);
     ssd1306_WriteString(buf, Font_7x10, White);

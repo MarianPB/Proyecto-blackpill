@@ -13,6 +13,26 @@ except ImportError as e:
     VISOR_ERROR = str(e)
 
 
+# Formas de onda: indice que entiende el firmware (LWAVE:n / RWAVE:n, enum waveform_t)
+INDICE_ONDA = {"sine": 0, "square": 1, "tri": 2, "chirp": 3,
+               "tab1k": 4, "multi": 5, "tabfea": 6, "accfea": 7}
+
+# Señales de prueba de frecuencia fija: (rótulo de arriba, rótulo de abajo, color, texto del panel)
+FORMAS_FIJAS = ["tab1k", "multi", "tabfea", "accfea"]
+INFO_FIJAS = {
+    "tab1k":  ("1 kHz exacto", "TABLA", "#1E7B3A",
+               "1000 Hz exactos, leídos de una tabla (sin acumulador)."),
+    "multi":  ("60 Hz + 7 kHz", "MULTITONO", "#6C3483",
+               "60 Hz + 7 kHz (el de 7 kHz a 1/4 de amplitud)."),
+    "tabfea": ("995,4 Hz", "TABLA (limpia)", "#1E7B3A",
+               "995,4 Hz leídos de una tabla: sin truncación de fase."),
+    "accfea": ("995,4 Hz", "PASO (trunca)", "#B03A2E",
+               "995,4 Hz por acumulador, peor caso de truncación: espurio ≈ −74 dBc en 47,8 kHz "
+               "(medir con banda 20 Hz - 48 kHz)."),
+}
+FONDO_FIJAS = "#FFF4E0"
+
+
 # ============================================================
 # COMUNICACIÓN CON EL STM32
 # ============================================================
@@ -118,7 +138,7 @@ class Aplicacion:
         )
 
         self.root.geometry(
-            "700x800"
+            "720x920+20+0"           # se ajusta al contenido despues de crear la interfaz
         )
 
         self.stm32 = STM32(self)
@@ -182,6 +202,11 @@ class Aplicacion:
         # ----------------------------------------------------
 
         self.crear_interfaz()
+
+        # alto justo para que entre todo, sin pasarse de la pantalla (notebooks de 768/864 px)
+        self.root.update_idletasks()
+        alto = min(self.root.winfo_reqheight() + 10, self.root.winfo_screenheight() - 80)
+        self.root.geometry(f"720x{alto}+20+0")
 
         # Marca la forma de onda por defecto (seno) en cada canal
 
@@ -282,6 +307,16 @@ class Aplicacion:
             side="left"
         )
 
+        # el visor va arriba: en pantallas bajas el panel del codec queda fuera de la ventana
+        ttk.Button(
+            frame_conexion,
+            text="Visor ADC",
+            command=self.abrir_visor
+        ).pack(
+            side="right",
+            padx=5
+        )
+
         # ====================================================
         # SEPARADOR
         # ====================================================
@@ -346,7 +381,7 @@ class Aplicacion:
             frame_L,
             text="Amplitud"
         ).pack(
-            pady=(20, 2)
+            pady=(10, 2)
         )
 
         # Selector de unidad
@@ -410,7 +445,7 @@ class Aplicacion:
         )
 
         frame_botones_L.pack(
-            pady=30
+            pady=12
         )
 
         ttk.Button(
@@ -481,7 +516,7 @@ class Aplicacion:
             frame_R,
             text="Amplitud"
         ).pack(
-            pady=(20, 2)
+            pady=(10, 2)
         )
 
         self.combo_unidad_R = ttk.Combobox(
@@ -543,7 +578,7 @@ class Aplicacion:
         )
 
         frame_botones_R.pack(
-            pady=30
+            pady=12
         )
 
         ttk.Button(
@@ -591,6 +626,27 @@ class Aplicacion:
         ttk.Label(cont, text="Der (R)").grid(row=2, column=0, padx=4)
         for i, f in enumerate(formas):
             self.boton_onda(cont, f, "R").grid(row=2, column=1 + i, padx=3, pady=2)
+
+        # --- señales de prueba de frecuencia fija (para THD): van aparte y en otro color ---
+        fijas = tk.LabelFrame(
+            self.root, bg=FONDO_FIJAS, fg="#8A5300", font=("Arial", 9, "bold"),
+            text=" Señales de prueba con frecuencia FIJA (no usan la frecuencia del canal) ",
+            padx=6, pady=4
+        )
+        fijas.pack(pady=(2, 6), padx=10)
+
+        for fila, canal in ((0, "L"), (1, "R")):
+            tk.Label(fijas, text=f"{canal}", bg=FONDO_FIJAS).grid(row=fila, column=0, padx=4)
+            for i, f in enumerate(FORMAS_FIJAS):
+                self.boton_fija(fijas, f, canal).grid(row=fila, column=1 + i, padx=3, pady=2)
+
+        tk.Label(
+            fijas, bg=FONDO_FIJAS, justify="left", font=("Arial", 8),
+            text="TABLA: se lee una tabla precalculada, sin acumulador (sin truncación de fase).\n"
+                 "PASO: acumulador de fase con el peor caso de truncación; su espurio cae en 47,8 kHz.\n"
+                 "Truncación DENTRO de audio: «Seno» de arriba a 1000 Hz vs «1 kHz exacto TABLA»\n"
+                 "(el seno por acumulador tiene un espurio ≈ −78 dBc en 10,1 kHz)."
+        ).grid(row=2, column=0, columnspan=1 + len(FORMAS_FIJAS), sticky="w", pady=(4, 0))
 
         # --- modo de salida (diferencial / simple) ---
         frame_salida = ttk.Frame(self.root)
@@ -702,10 +758,49 @@ class Aplicacion:
             c.create_line(*pts, fill=col, width=2)
 
 
+    def boton_fija(self, parent, forma, canal):
+
+        import math
+        w, h = 104, 50
+        arriba, abajo, col, _ = INFO_FIJAS[forma]
+
+        c = tk.Canvas(
+            parent, width=w, height=h, bg="white",
+            highlightthickness=2, highlightbackground="#D9B77A", cursor="hand2"
+        )
+
+        # icono chico en la parte de arriba
+        mid, amp, x0, x1 = 12, 8, 6, w - 6
+        if forma == "accfea":                          # escalonada: se ve el "paso" de la fase
+            pasos = 10
+            pts = []
+            for k in range(pasos):
+                xa = x0 + k * (x1 - x0) / pasos
+                xb = x0 + (k + 1) * (x1 - x0) / pasos
+                y = mid - amp * math.sin(2 * math.pi * (k + 0.5) / pasos)
+                pts += [xa, y, xb, y]
+        else:
+            pts = []
+            for x in range(x0, x1 + 1):
+                t = (x - x0) / (x1 - x0)
+                if forma == "multi":
+                    y = mid - amp * (0.8 * math.sin(2 * math.pi * t) + 0.2 * math.sin(2 * math.pi * 12 * t))
+                else:
+                    y = mid - amp * math.sin(2 * math.pi * t)
+                pts += [x, y]
+        c.create_line(*pts, fill=col, width=2)
+
+        c.create_text(w / 2, 30, text=arriba, fill="black", font=("Arial", 8, "bold"))
+        c.create_text(w / 2, 42, text=abajo, fill=col, font=("Arial", 8, "bold"))
+
+        c.bind("<Button-1>", lambda e: self.set_onda(canal, forma))
+        self.botones_onda[canal][forma] = c
+        return c
+
+
     def set_onda(self, canal, forma):
 
-        idx = {"sine": 0, "square": 1, "tri": 2, "chirp": 3}[forma]
-        self.stm32.enviar(f"{canal}WAVE:{idx}")
+        self.stm32.enviar(f"{canal}WAVE:{INDICE_ONDA[forma]}")
 
         if canal == "L":
             self.forma_L = forma
@@ -724,6 +819,8 @@ class Aplicacion:
         for f, c in self.botones_onda[canal].items():
             if f == forma_sel:
                 c.config(bg="#CFE6FF", highlightbackground="#0B63C4")
+            elif f in INFO_FIJAS:
+                c.config(bg="white", highlightbackground="#D9B77A")
             else:
                 c.config(bg="white", highlightbackground="#BBBBBB")
 
@@ -769,10 +866,18 @@ class Aplicacion:
             ttk.Entry(fila, textvariable=var, width=8, justify="center").pack(side="left")
         ttk.Button(panel_chirp, text="Aplicar chirp", command=cmd_chirp).pack(pady=5)
 
+        # --- aviso para las señales de prueba (su frecuencia no se puede cambiar) ---
+        panel_prueba = tk.Label(
+            cont, bg=FONDO_FIJAS, fg="#8A5300", justify="center", wraplength=230,
+            font=("Arial", 9, "bold"), padx=6, pady=6
+        )
+
         if canal == "L":
             self.panel_fija_L, self.panel_chirp_L = panel_fija, panel_chirp
+            self.panel_prueba_L = panel_prueba
         else:
             self.panel_fija_R, self.panel_chirp_R = panel_fija, panel_chirp
+            self.panel_prueba_R = panel_prueba
 
         panel_fija.pack()   # por defecto se muestra la frecuencia fija
 
@@ -780,15 +885,20 @@ class Aplicacion:
     def actualizar_panel_frecuencia(self, canal):
 
         if canal == "L":
-            forma, fija, chirp = self.forma_L, self.panel_fija_L, self.panel_chirp_L
+            forma, fija, chirp, prueba = self.forma_L, self.panel_fija_L, self.panel_chirp_L, self.panel_prueba_L
         else:
-            forma, fija, chirp = self.forma_R, self.panel_fija_R, self.panel_chirp_R
+            forma, fija, chirp, prueba = self.forma_R, self.panel_fija_R, self.panel_chirp_R, self.panel_prueba_R
+
+        fija.pack_forget()
+        chirp.pack_forget()
+        prueba.pack_forget()
 
         if forma == "chirp":
-            fija.pack_forget()
             chirp.pack()
+        elif forma in INFO_FIJAS:
+            prueba.config(text="Frecuencia FIJA\n" + INFO_FIJAS[forma][3])
+            prueba.pack()
         else:
-            chirp.pack_forget()
             fija.pack()
 
 

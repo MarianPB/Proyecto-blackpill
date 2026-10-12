@@ -151,8 +151,8 @@ Otras causas secundarias:
 **Cómo confirmarlo:** mandar `stream_dropped` a la PC (por ejemplo al hacer `STREAM:0`). Si coincide con las
 perdidas contadas por `seq`, es el ring lleno. Con el visor nuevo la pérdida debería bajar de ~10 % a ~0.
 
-**Mejora recomendada (NO aplicada):** `RING_SIZE` de 16384 a 65536 en `stream.c` (112 ms de margen; debería
-caber en los 128 kB de RAM del F411, hay que verificar el mapa de memoria al compilar).
+**Aplicado:** `RING_SIZE` pasó de 16384 a 65536 en `stream.c` (112 ms de margen). Compilado con el
+arm-none-eabi-gcc de STM32CubeIDE: RAM usada ~85 kB de 128 kB.
 
 ## Visor del ADC (`pc/visor_adc.py`)
 
@@ -216,6 +216,45 @@ para lo de arriba, porque el conteo por muestras ya es exacto.
 
 No se puede capturar en el STM32 y mandar después: 3 s son 1,7 MB y la RAM es de 128 kB. Hay que transmitir en vivo.
 
+## Señales de prueba y métricas (THD, THD+N, SNR, SFDR...)
+
+**Firmware:** se agregaron las formas de onda de frecuencia fija de la V2 (`waveforms.c/.h`, `tabla_1khz.h`,
+`tabla_fea.h`), las mismas que en `Blackpill_codec_V2`:
+
+| `xWAVE:` | Señal |
+|---|---|
+| 4 | 1 kHz exacto por TABLA (3125 muestras = 32 períodos, sin acumulador) |
+| 5 | Multitono 60 Hz + 7 kHz, 4:1 (señal SMPTE de intermodulación) |
+| 6 | 995,4 Hz por TABLA (limpia) |
+| 7 | 995,4 Hz por acumulador con la FTW de peor truncación (`FTW_FEA`) |
+
+El OLED muestra su nombre y "frecuencia fija". La app las tiene en un bloque aparte (fondo naranja) y, al
+elegir una, el panel de frecuencia del canal avisa que la frecuencia es fija.
+
+**Ojo con 6 vs 7:** con `FTW_FEA` el error de fase alterna cada muestra, así que el espurio de truncación
+(~-74 dBc) cae en fs/2 - f0 = **47,8 kHz**, fuera de la banda de audio (y en la zona de transición de los
+filtros del codec). Para ver la truncación DENTRO de audio, comparar **Seno (idx 0) a 1000 Hz** contra
+**1 kHz TABLA (idx 4)**: el seno por acumulador tiene un espurio de ~-78 dBc en 10,1 kHz (verificado en simulación).
+
+**PC:** `pc/metricas.py` calcula la planilla de la guía de mediciones; `pc/visor_adc.py` la usa:
+- Al terminar una medición de **Tiempo fijo**, las muestras se guardan solas en `mediciones/AAAAMMDD_HHMMSS_<ondaL>_<ondaR>.npz`
+  (con lo que decía la app: forma de onda, frecuencia, amplitud, salida) y se abre la ventana de resultados.
+- Fila «Métricas»: banda (400 Hz-20 kHz como el datasheet, 20 Hz-20 kHz, o 20 Hz-48 kHz), ponderación A y
+  «Calcular métricas» para recalcular la última medición con otra banda. Cada cálculo deja un `.txt` al lado del `.npz`.
+- Calcula: frecuencia y nivel de la fundamental, THD (y %), THD+N (y %), SINAD, ENOB, SNR (respecto de la señal y
+  del fondo de escala), SFDR y su frecuencia, ruido en banda, total en banda (piso de ruido con el DAC apagado),
+  rango dinámico EIAJ (si la señal está entre -75 y -45 dBFS) y separación entre canales (si un canal está
+  40 dB o más por debajo del otro).
+- Espectro: Welch, segmentos de 32768, 50 % de solape, **Blackman-Harris de 7 términos** escalado en potencia
+  (con Hann la pollera de la fundamental se sumaría como ruido a -80 dBc). Bloques con tramas perdidas excluidos.
+- Verificado con señales sintéticas de valor conocido (THD, THD+N, ruido, rango dinámico y separación dentro de
+  0,1 dB) y de punta a punta con `serial_falso.py`.
+
+Reanalizar después: `python pc/analizar_medicion.py mediciones/*.npz --banda 20 20000 --a`
+
+Para la amplitud a -60 dBFS (rango dinámico) la app no llega (1 % = -40 dB): mandar el registro directo,
+`I2CW:65,135` (canal L) o `I2CW:66,135` (R) = 0xFF - 120 pasos de 0,5 dB. Se mantiene hasta que se toque la amplitud.
+
 ## Documentación interactiva
 
 `docs/viaje_de_datos.html` (un solo archivo, sin dependencias) explica el envío STM32 -> PC con simulaciones: mapa
@@ -224,8 +263,14 @@ comandos PC -> STM32 e interrupciones. Los parámetros marcados como "supuestos"
 
 ## Ojo
 
-- No se pudo compilar ni probar en hardware desde acá (no hay toolchain ARM instalada).
-  Se verificó la sintaxis con gcc y el parser/visor de la PC con datos simulados.
+- **Dato del ADC corrido 1 bit (medido el 08/10 en la placa):** el I2S2ext recibía la palabra corrida un bit a
+  la derecha (el bit 23 nunca llegaba en 1: los negativos aparecían como casi +1,0 y la señal a la mitad de
+  escala). Con 1 kHz al 20 % daba -17,8 dBFS en vez de los -11,5 esperados; realineado, -11,8. Arreglado en
+  `stream_push_audio()` con `<< 1` antes del `>> 8`. Las mediciones hechas antes se reanalizan con
+  `python pc/analizar_medicion.py archivo.npz --corrido`.
+
+- Compila y linkea con el arm-none-eabi-gcc de STM32CubeIDE (flash ~212 kB, RAM ~85 kB), pero
+  **todavía no se probó en el hardware**. El parser/visor de la PC se probó con datos simulados.
 - Hasta que hagas los pasos de arriba en el MX, una regeneración desde el `.ioc` viejo volvería a dejar el I2S en half duplex.
 
 ## Capturas de la app con datos simulados

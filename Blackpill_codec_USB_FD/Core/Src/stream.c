@@ -5,7 +5,7 @@
 
 extern USBD_HandleTypeDef hUsbDeviceFS;
 
-#define RING_SIZE  16384u              // potencia de 2 (~10 tramas de audio de 256 frames)
+#define RING_SIZE  65536u              // potencia de 2 (~42 tramas de audio de 256 frames, ~112 ms)
 #define RING_MASK  (RING_SIZE - 1u)
 #define MAX_CHUNK  4096u               // bytes maximos por transferencia USB
 
@@ -57,9 +57,12 @@ void stream_push_audio(const uint16_t *f, uint16_t frames)
     {
         for (uint16_t i = 0; i < frames; i++)
         {
-            // cada muestra: 24 bits alineados a la izquierda en 32 (hi<<16 | lo) -> >>8 con signo
-            int32_t l = (int32_t)(((uint32_t)f[0] << 16) | f[1]) >> 8;
-            int32_t r = (int32_t)(((uint32_t)f[2] << 16) | f[3]) >> 8;
+            // cada muestra: 24 bits en una palabra de 32 (hi<<16 | lo). El I2S2ext la recibe corrida un
+            // bit a la derecha (el bit 31 es el ultimo bit de relleno, siempre 0, y el LSB cae en el
+            // relleno): <<1 la vuelve a alinear y >>8 con signo deja los 24 bits.
+            // Medido el 08/10 con 1 kHz al 20 %: sin el <<1 da 6 dB menos y el signo nunca llega.
+            int32_t l = (int32_t)((((uint32_t)f[0] << 16) | f[1]) << 1) >> 8;
+            int32_t r = (int32_t)((((uint32_t)f[2] << 16) | f[3]) << 1) >> 8;
             f += 4;
 
             ring_put((uint8_t)l);

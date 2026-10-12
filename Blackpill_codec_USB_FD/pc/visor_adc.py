@@ -12,6 +12,9 @@ Formato de cada trama (STM32 -> PC), little-endian (ver Core/Inc/stream.h):
 import threading
 import collections
 import time
+import os
+import json
+import datetime
 
 import numpy as np
 import serial
@@ -22,6 +25,8 @@ import matplotlib
 matplotlib.use("TkAgg")
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 from matplotlib.figure import Figure
+
+import metricas
 
 
 FS = 97656.25                 # frecuencia de muestreo del codec (debe coincidir con el firmware)
@@ -48,6 +53,17 @@ PROMEDIO_CONT = 5             # en modo continuo se promedian y muestran 5 bloqu
 MAX_MEDICION_S = 60           # tope de la medicion de tiempo fijo (se guarda todo en memoria)
 FINOS_EN_VIVO = 3             # bloques individuales que se dibujan en fino mientras se mide (cada linea cuesta ~1 ms)
 ESPERA_DAC_S = 0.3            # con "disparar DAC": tiempo con el DAC apagado antes de empezar a medir
+
+# metricas (ver metricas.py y Guia_mediciones_especificaciones.txt)
+CARPETA_MEDICIONES = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "mediciones")
+BANDAS = {
+    "400 Hz - 20 kHz (datasheet)": (400.0, 20000.0),
+    "20 Hz - 20 kHz": (20.0, 20000.0),
+    "20 Hz - 48 kHz (todo)": (20.0, 48000.0),
+}
+NOMBRE_ONDA = {"sine": "Seno (acumulador)", "square": "Cuadrada", "tri": "Triangular", "chirp": "Chirp",
+               "tab1k": "1 kHz exacto por TABLA", "multi": "Multitono 60 Hz + 7 kHz",
+               "tabfea": "995,4 Hz por TABLA (limpia)", "accfea": "995,4 Hz por PASO (trunca)"}
 
 
 # ============================================================
@@ -386,6 +402,7 @@ class Medicion:
         # espectros: en tiempo fijo se guardan todos; en continuo solo los ultimos 5
         self.espectros = [] if modo == "fijo" else collections.deque(maxlen=PROMEDIO_CONT)
         self.crudo = []                        # muestras de cada bloque (solo tiempo fijo)
+        self.meta = {}                         # que estaba generando el DAC (se anota al terminar)
 
 
 class VisorADC:
@@ -480,6 +497,21 @@ class VisorADC:
         ttk.Button(fila2, text="DAC OFF", command=lambda: self.dac_manual(False)).pack(side="left")
         ttk.Label(fila2, text="(la forma de onda, frecuencia y amplitud se eligen en la ventana principal)",
                   foreground="gray").pack(side="left", padx=10)
+
+        fila3 = ttk.Frame(marco)
+        fila3.pack(fill="x", pady=(4, 0))
+
+        ttk.Label(fila3, text="Métricas (THD, THD+N, SNR, SFDR...) — banda:").pack(side="left")
+        self.banda = tk.StringVar(value=list(BANDAS)[0])
+        ttk.Combobox(fila3, textvariable=self.banda, state="readonly", width=26,
+                     values=list(BANDAS)).pack(side="left", padx=(2, 8))
+        self.pond_a = tk.IntVar(value=0)
+        ttk.Checkbutton(fila3, text="Ponderación A", variable=self.pond_a).pack(side="left")
+        ttk.Button(fila3, text="Calcular métricas", command=self.calcular_metricas).pack(side="left", padx=(12, 2))
+        ttk.Label(fila3, text="(con «Tiempo fijo»; se guarda en /mediciones)",
+                  foreground="gray").pack(side="left", padx=8)
+        self.win_res = None
+        self.ultimo_archivo = None
 
         # ---- registro de bloques ----
         self.txt_log = tk.Text(self.win, height=7, font=("Consolas", 9), state="disabled", wrap="none")
@@ -800,6 +832,93 @@ class VisorADC:
         self._pintar_espectros(m, final=True)
         if datos is not None:
             self._mostrar_resultado_tiempo(datos)
+            m.meta = self._describir_generador()
+            self._guardar_medicion(m)
+            self.calcular_metricas()
+
+    # ---- metricas y guardado ----
+
+    def _describir_generador(self):
+        """Lo que la ventana principal dice que esta generando (para dejarlo anotado con la medicion)."""
+        app = getattr(self.stm32, "app", None)
+        meta = {"fecha": datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")}
+        if app is None:
+            return meta
+        for c in ("L", "R"):
+            try:
+                forma = getattr(app, f"forma_{c}")
+                txt = NOMBRE_ONDA.get(forma, forma)
+                if forma in ("sine", "square", "tri"):
+                    txt += f", {getattr(app, f'frecuencia_{c}').get()} Hz"
+                txt += f", amplitud {getattr(app, f'amplitud_{c}').get()} % (según la app)"
+                meta[f"onda_{c}"] = txt
+                meta[f"forma_{c}"] = forma
+            except (AttributeError, tk.TclError):
+                pass
+        try:
+            meta["salida"] = {"DIFF": "diferencial", "SE": "simple"}.get(app.modo_salida.get(), app.modo_salida.get())
+        except (AttributeError, tk.TclError):
+            pass
+        return meta
+
+    def _guardar_medicion(self, m):
+        """Guarda las muestras crudas de la medicion (.npz) para poder reanalizarla despues (analizar_medicion.py)."""
+        try:
+            os.makedirs(CARPETA_MEDICIONES, exist_ok=True)
+            sello = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+            formas = "_".join(m.meta.get(f"forma_{c}", "x") for c in ("L", "R"))
+            ruta = os.path.join(CARPETA_MEDICIONES, f"{sello}_{formas}.npz")
+            np.savez_compressed(ruta, datos=np.stack(m.crudo).astype(np.float32),
+                                dano=np.array([b["dano"] for b in m.bloques]), fs=FS,
+                                meta=json.dumps(m.meta, ensure_ascii=False))
+            self.ultimo_archivo = ruta
+            self._log(f"Guardado: {ruta}")
+        except OSError as e:
+            self.ultimo_archivo = None
+            self._log(f"No se pudo guardar la medición: {e}")
+
+    def calcular_metricas(self):
+        m = self.ultima_med
+        if m is None or self.med is not None:
+            messagebox.showinfo("Métricas", "Primero hacé una medición de «Tiempo fijo» (por ejemplo 5 s).")
+            return
+        if m.modo != "fijo" or not m.crudo:
+            messagebox.showinfo("Métricas", "Las métricas se calculan sobre una medición de «Tiempo fijo».")
+            return
+        validos = [b for b, info in zip(m.crudo, m.bloques) if not info["dano"]]
+        if not validos:
+            messagebox.showwarning("Métricas", "Todos los bloques tuvieron tramas perdidas.")
+            return
+        banda = BANDAS[self.banda.get()]
+        res, segs = metricas.medir(validos, banda, bool(self.pond_a.get()))
+        meta = dict(getattr(m, "meta", {}) or {})
+        meta["segmentos"] = segs
+        texto = metricas.informe(res, meta)
+        if len(validos) < len(m.crudo):
+            texto += f"\n\nSe excluyeron {len(m.crudo) - len(validos)} bloque(s) con tramas perdidas."
+        if self.ultimo_archivo:
+            texto += f"\nMuestras: {self.ultimo_archivo}"
+            ruta_txt = os.path.splitext(self.ultimo_archivo)[0] + \
+                f"_{banda[0]:g}-{banda[1]:g}Hz{'_A' if self.pond_a.get() else ''}.txt"
+            try:
+                with open(ruta_txt, "w", encoding="utf-8") as fh:
+                    fh.write(texto + "\n")
+            except OSError:
+                pass
+        self._mostrar_resultados(texto)
+
+    def _mostrar_resultados(self, texto):
+        if self.win_res is None or not self.win_res.winfo_exists():
+            self.win_res = tk.Toplevel(self.win)
+            self.win_res.title("Resultados de la medición")
+            self.win_res.geometry("820x640")
+            self.txt_res = tk.Text(self.win_res, font=("Consolas", 10), wrap="none")
+            self.txt_res.pack(fill="both", expand=True)
+        self.txt_res.config(state="normal")
+        self.txt_res.delete("1.0", "end")
+        self.txt_res.insert("end", texto)
+        self.txt_res.config(state="disabled")
+        self.win_res.lift()
 
     # ---- graficos de la medicion ----
 
