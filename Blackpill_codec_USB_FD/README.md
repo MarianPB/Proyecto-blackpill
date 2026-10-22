@@ -18,6 +18,8 @@ no se tocaron: esta es una copia de `Blackpill_codec_V2` con los cambios de abaj
 | Comando | Efecto |
 |---|---|
 | `STREAM:1` / `STREAM:0` | empieza / termina el envío del ADC |
+| `STREAM:L` / `STREAM:R` | envía un solo canal del ADC (la mitad de bytes, para PCs cuyo USB no llega al estéreo) |
+| `ALIN` | responde `ALIN:corridos,directos`: bloques del ADC que llegaron corridos 1 bit (y se corrigieron) desde el último `STREAM` |
 | `ADC:1` / `ADC:0` | enciende / apaga el ADC del codec (reg 64) |
 | `DAC:1` / `DAC:0` | enciende / apaga el DAC del codec (reg 64) |
 | `I2CW:reg,valor` | escribe un registro del PCM3060 (acepta `0x..`) |
@@ -30,6 +32,7 @@ no se tocaron: esta es una copia de `Blackpill_codec_V2` con los cambios de abaj
 0xAA 0x55 | tipo | seq | n (2 B) | payload
 tipo 0x01: n frames estéreo, cada uno [L0 L1 L2 R0 R1 R2]  (24 bits con signo)
 tipo 0x02: n caracteres ASCII (respuestas de texto)
+tipo 0x03 / 0x04: n frames de un solo canal (L / R), cada uno [X0 X1 X2]
 ```
 
 `seq` cuenta tramas (da la vuelta a 255): si salta, la PC sabe cuántas se perdieron.

@@ -467,6 +467,15 @@ static void parse_command(char *command)
     // Streaming del ADC hacia la PC
     else if (strcmp(command, "STREAM:1") == 0)
     {
+        stream_alin_reset();
+        stream_canales = STREAM_LR;
+        stream_on = 1;
+    }
+    // un solo canal: la mitad de bytes por segundo (para PC cuyo USB no llega al estereo)
+    else if (strcmp(command, "STREAM:L") == 0 || strcmp(command, "STREAM:R") == 0)
+    {
+        stream_alin_reset();
+        stream_canales = (command[7] == 'L') ? STREAM_L : STREAM_R;
         stream_on = 1;
     }
     else if (strcmp(command, "STREAM:0") == 0)
@@ -501,6 +510,12 @@ static void parse_command(char *command)
     else if (strcmp(command, "PING") == 0)
     {
         stream_push_text("PONG");
+    }
+
+    // Cuantos bloques de audio llegaron corridos un bit (y se corrigieron) desde el ultimo STREAM:1
+    else if (strcmp(command, "ALIN") == 0)
+    {
+        stream_alin_informar();
     }
 }
 

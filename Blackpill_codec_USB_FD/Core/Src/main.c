@@ -53,7 +53,7 @@ typedef enum {
 /* USER CODE BEGIN PD */
 #define FS           97656.25          // frecuencia de muestreo real (I2SCLK 100MHz / 1024)
 
-#define FRAMES_HALF  256               // frames estereo por media vuelta del DMA
+#define FRAMES_HALF  256               // frames estereo por media vuelta del DMA (ritmo de paquetes fs/256 = 381,5 Hz)
 #define FRAMES_TOTAL (2 * FRAMES_HALF) // frames en todo el buffer (512)
 #define BUF_HW       (FRAMES_TOTAL * 4)// halfwords totales: 2 canales x 2 halfwords c/u (2048)
 #define I2S_SIZE     (FRAMES_TOTAL * 2)// tamaño que espera la HAL del I2S (1024)
