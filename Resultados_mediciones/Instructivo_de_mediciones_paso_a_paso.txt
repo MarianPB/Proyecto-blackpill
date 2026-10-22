@@ -1,0 +1,832 @@
+================================================================================
+   INSTRUCTIVO DE MEDICIONES, PASO A PASO  -  AGSE (generador DAC + ADC)
+   Qué conectar, qué tocar en la app, qué anotar y qué NO hacer, medida por medida
+================================================================================
+
+Este archivo es para tener al lado mientras se mide. No explica la teoría (eso
+está en Cadena_de_datos_y_protocolo_de_medicion.txt y en
+Guia_mediciones_especificaciones.txt): acá está solo el CÓMO.
+
+  Sección 1.  Las 12 reglas que evitan casi todos los errores
+  Sección 2.  Trampas de la app (lo que muestra NO siempre es lo que hay)
+  Sección 3.  Los cuatro montajes (cómo conectar el circuito)
+  Sección 4.  Puesta a punto: lo que se hace SIEMPRE antes de medir
+  Sección 5.  Cómo se hace UNA medición en el visor y cómo saber si vale
+  Sección 6.  Las 15 medidas, una por una
+  Sección 7.  Si algo da raro: síntoma -> causa -> qué hacer
+  Sección 8.  Tablas para completar
+
+App:      3_Integracion_ADC_DAC\Blackpill_codec_USB_FD\pc\comandos.py
+          (acceso directo del Escritorio: "APP - Integrada ADC+DAC (nueva)")
+Firmware: el de la rama "mediciones-metricas" del repo compartido (o la carpeta
+          Blackpill_codec_USB_FD de esta misma carpeta). Con el firmware viejo
+          las mediciones salen MAL (ver regla 1).
+Pines:    Conexionado_BlackPill_PCM3060.png y CONEXIONADO_pin_a_pin.txt
+
+
+================================================================================
+SECCIÓN 1.  LAS 12 REGLAS
+================================================================================
+
+ 1. FIRMWARE CORRECTO. Tiene que estar cargado el que realinea el dato del ADC
+    (stream.c con el "<<1"). Con el anterior todo sale 6 dB más bajo y sin
+    signo. Se comprueba en la medida M2: con la entrada a masa el registro
+    tiene que decir "DC +0.0000x". Si dice "DC +0.50000", es el firmware viejo.
+
+ 2. AL ENCENDER, EL EQUIPO ARRANCA AL 100 % Y EN DIFERENCIAL, con los dos
+    canales encendidos y un seno de 1 kHz. La app NO lo sabe: muestra 50 % y
+    no manda nada hasta que apretás un botón. Por eso existe la "puesta a
+    punto" de la sección 4 y hay que hacerla siempre.
+
+ 3. LA AMPLITUD NO SE MANDA AL MOVER LA BARRA. Se manda recién al apretar
+    «Actualizar amplitud». Lo mismo la frecuencia: hay que apretar «Aplicar
+    frecuencia».
+
+ 4. SALIDA EN «SIMPLE» para todo lo que pase por el ADC. Hay que hacer clic en
+    «Simple» aunque ya se vea marcado (ver sección 2).
+
+ 5. NO SATURAR EL ADC. El DAC entrega 4 Vpp y el ADC acepta 3 Vpp. Con el lazo
+    directo, la amplitud de trabajo es 63 %. Con la resistencia en serie
+    (8,2 k a 10 k) se puede usar 100 %. La planilla avisa "el ADC puede estar
+    recortando" si el nivel pasa de -0,5 dBFS: esa medición NO sirve.
+
+ 6. NUNCA UN PIN VIN DIRECTO A MASA CON UN CABLE. El pin está polarizado a
+    2,5 V por dentro; a masa va el OTRO lado del capacitor en serie.
+
+ 7. NUNCA EL COCODRILO DE MASA DEL OSCILOSCOPIO EN UNA SALIDA (VOUT+ o VOUT-).
+    Las dos son salidas activas. La masa de la punta va a AGND, siempre.
+
+ 8. PARA RUIDO Y PUREZA, NADA MÁS CONECTADO. Sacá el osciloscopio y el
+    frecuencímetro de la placa: su masa mete zumbido de 50 Hz. Notebook a
+    batería (sin el cargador) si se puede.
+
+ 9. LOS NÚMEROS SALEN SOLO DE «Iniciar medición» en «Tiempo fijo». El gráfico
+    en vivo («Iniciar captura») es para mirar, no para anotar.
+
+10. UNA MEDICIÓN VALE SOLO SI: tramas perdidas = 0, la dispersión entre bloques
+    es menor que 0,1 dB y no hay aviso de recorte (ver sección 5).
+
+11. DURANTE LA MEDICIÓN NO SE TOCA NADA: ni la placa, ni los cables, ni el
+    teclado del equipo, ni se mueven o agrandan las ventanas (mover una ventana
+    frena la lectura del USB y se pierden tramas).
+
+12. ANOTAR SIEMPRE EL NOMBRE DEL ARCHIVO .npz de cada medición. La planilla
+    guarda "lo que decía la app", que puede no ser lo que había de verdad
+    (regla 2): lo que vale es lo que anotás vos.
+
+
+================================================================================
+SECCIÓN 2.  TRAMPAS DE LA APP
+================================================================================
+
+La app solo MANDA comandos; nunca le pregunta al equipo en qué estado está.
+Entonces, lo que se ve en pantalla es "lo último que apreté", no "lo que hay".
+
+  Lo que ves en la app          Lo que hay de verdad si no tocaste nada
+  ----------------------------  ---------------------------------------------
+  Amplitud 50 %                 100 % (recién encendido)
+  Salida: Diferencial           Diferencial (recién encendido), o lo que haya
+                                quedado de antes si solo reabriste la app
+  Forma de onda: seno           Seno 1 kHz (recién encendido), o lo de antes
+  ON / OFF (no muestra nada)    Los dos canales ENCENDIDOS (recién encendido)
+
+  - Si cerrás y volvés a abrir la app SIN desenchufar el equipo, el equipo
+    conserva todo lo anterior y la app vuelve a mostrar sus valores iniciales.
+  - Si desenchufás el equipo (o lo reseteás), vuelve a 100 %, diferencial,
+    seno 1 kHz, los dos canales encendidos.
+  - En los dos casos: repetir la puesta a punto de la sección 4.
+
+  Otras cosas a saber:
+  - La unidad «V» de la amplitud está mal escalada (usa 3,3 V). Usar siempre «%».
+  - Para poner un porcentaje exacto: clic en la barra y después las flechas
+    <- -> del teclado (mueven de a 1 %).
+  - Las señales del bloque naranja (frecuencia FIJA) ignoran el casillero de
+    frecuencia.
+  - «DAC encendido» / «ADC encendido» (panel Codec) apagan el conversor entero.
+    Dejar los dos tildados siempre. Para silenciar un canal se usa «OFF».
+  - En el visor, «DAC ON» y «DAC OFF» actúan sobre los canales elegidos en
+    «Canales del DAC».
+  - «Disparar al iniciar» apaga y enciende SOLO los canales de «Canales del
+    DAC». El otro canal queda como estaba: si estaba encendido, sigue encendido.
+  - La pantalla OLED del equipo muestra la forma de onda y la frecuencia que el
+    micro tiene de verdad. Si no coincide con la app, vale el OLED.
+  - El teclado del equipo también cambia cosas, y la app no se entera. No
+    tocarlo durante la sesión.
+
+
+================================================================================
+SECCIÓN 3.  LOS CUATRO MONTAJES
+================================================================================
+
+Pines del PCM3060:  VOUTL+ = 20   VOUTL- = 19   VOUTR+ = 18   VOUTR- = 17
+                    VINL   = 25   VINR   = 26   AGND   = 22 y 23
+
+Cada entrada VIN lleva un capacitor en serie (electrolítico de unos 4,7 uF, con
+el + del lado del pin VIN). En lo que sigue, "punto de entrada" es el lado de
+ese capacitor que NO toca el pin VIN.
+
+MONTAJE A - LAZO DIRECTO (el de casi todas las medidas)
+
+    VOUTL+ ---[ Rs opcional ]---||---> VINL        (canal L)
+    VOUTR+ ---[ Rs opcional ]---||---> VINR        (canal R)
+              punto de entrada ^
+
+    - Se usa la salida "+" de cada canal. VOUTL- y VOUTR- quedan sin conectar.
+    - Cables lo más cortos posible. Nada más colgado de esos nodos.
+    - Sin Rs: amplitud de trabajo 63 %  (nivel en el ADC: unos -1,5 dBFS).
+    - Con Rs: amplitud de trabajo 100 %. Nivel esperado en el ADC:
+
+          Rs        nivel al 100 %      nivel al 63 %
+          8,2 k       -2,7 dBFS           -6,7 dBFS
+          9,1 k       -3,1 dBFS           -7,1 dBFS
+          10 k        -3,5 dBFS           -7,5 dBFS
+
+      (sale de 20 log( 4 Vpp x 10k/(10k+Rs) / 3 Vpp ); los 10 k de entrada del
+      ADC son un valor típico, así que puede variar +-1 dB: se calibra en M4)
+
+MONTAJE B - ENTRADAS A MASA (para el ruido del ADC solo)
+
+    VOUTL+  (suelto, sin conectar)
+    AGND ----cable corto----||---> VINL
+    AGND ----cable corto----||---> VINR
+
+    - Se desconecta la salida del DAC y el punto de entrada se lleva a AGND.
+    - Si la placa tiene el puente de 3 pines "lazo / tierra": pasarlo a tierra.
+    - Si hay Rs, poner la masa del lado del capacitor (después de Rs), no antes.
+    - PROHIBIDO: cable del pin VIN a masa (regla 6). PROHIBIDO: dejar la entrada
+      al aire (mide cualquier cosa).
+
+MONTAJE C - LAZO CRUZADO (para saber de quién es un defecto)
+
+    VOUTL+ ---[Rs]---||---> VINR
+    VOUTR+ ---[Rs]---||---> VINL
+
+MONTAJE D - SALIDA AL INSTRUMENTO (osciloscopio o frecuencímetro)
+
+    VOUTL+ ---> punta del instrumento       masa de la punta ---> AGND
+    (para diferencial: canal 1 en VOUTL+, canal 2 en VOUTL-, las dos masas en
+     AGND, y la función matemática CH1 - CH2)
+
+    - El lazo al ADC se DESCONECTA (al 100 % sin Rs el ADC recortaría).
+    - La salida tiene 2,5 V de continua: usar acoplamiento en alterna, o leer
+      el Vpp y no el valor medio.
+    - No cargar la salida con auriculares, parlantes ni resistencias chicas.
+    - Regla 7: la masa de la punta nunca en VOUT-.
+
+
+================================================================================
+SECCIÓN 4.  PUESTA A PUNTO  (siempre, antes de la primera medida y cada vez que
+            se reabre la app o se desenchufa el equipo)
+================================================================================
+
+  1. Armar el montaje A. Enchufar el equipo directo a un USB de la PC (sin hub).
+  2. Abrir la app. «Actualizar», elegir el COM, «Conectar» (luz verde).
+     Si no conecta: hay otro programa usando ese COM (IDE, PuTTY). Cerrarlo.
+  3. CANAL LEFT: llevar la amplitud a la de trabajo (63 %, o 100 % si hay Rs)
+     y apretar «Actualizar amplitud».
+  4. CANAL RIGHT: lo mismo, y «Actualizar amplitud».
+  5. Salida: clic en «Simple». Si ya estaba marcado, clic en «Diferencial» y
+     de nuevo en «Simple» (así seguro se manda).
+  6. Apretar «OFF» en los dos canales (arrancamos en silencio).
+  7. Panel Codec: «ADC encendido» y «DAC encendido» tildados.
+  8. Abrir el visor: botón «Visor ADC» (arriba a la derecha).
+  9. En el visor dejar: «Tiempo fijo», Duración 5, Descartar el inicio 1,
+     banda «400 Hz - 20 kHz (datasheet)», «Ponderación A» SIN tildar.
+ 10. Esperar un minuto con todo enchufado antes de la primera medida.
+
+  Completar la tabla 8.0 (datos de la sesión) antes de seguir.
+
+
+================================================================================
+SECCIÓN 5.  CÓMO SE HACE UNA MEDICIÓN Y CÓMO SABER SI VALE
+================================================================================
+
+5.1 Los pasos, siempre los mismos
+  a) En la ventana principal: elegir forma de onda, frecuencia y amplitud del
+     canal que se mide (y apretar los botones que las mandan).
+  b) En el visor: elegir «DAC» y «Canales del DAC» como diga la medida.
+  c) «Iniciar medición». Manos afuera (regla 11).
+  d) La barra de estado va mostrando "Descartando el transitorio" y después
+     "Midiendo: bloque 1 de 5...". Al final dice "Medición lista".
+  e) Se abre sola la ventana «Resultados de la medición» (la planilla) y la
+     medición queda guardada en  Blackpill_codec_USB_FD\mediciones\ :
+         AAAAMMDD_HHMMSS_<ondaL>_<ondaR>.npz            (las muestras)
+         ..._400-20000Hz.txt                              (la planilla)
+  f) Para ver la misma medición con otra banda o con ponderación A: cambiar la
+     banda / tildar «Ponderación A» y apretar «Calcular métricas». NO hace falta
+     medir de nuevo. Cada cálculo deja su .txt.
+
+5.2 Los tres chequeos de validez (si falla uno, se repite la medición)
+  1) TRAMAS PERDIDAS = 0. Se ve en la barra de estado durante la medición y en
+     el registro: "Resumen (5/5 bloques sin pérdidas)". Si dice 4/5 o menos, o
+     la planilla dice "Se excluyeron N bloque(s)", repetir.
+  2) DISPERSIÓN < 0,1 dB. En el registro: "L: RMS -x,x dBFS (+-0,0x dB entre
+     bloques)". Si es mayor, algo se movió o hay un falso contacto.
+  3) SIN AVISO DE RECORTE. Si la planilla dice "OJO canal L: nivel ... el ADC
+     puede estar recortando", bajar la amplitud y repetir.
+
+5.3 Cómo leer la planilla
+  - "Nivel de la fundamental": cuánto llega al ADC. Tiene que coincidir con el
+    nivel esperado del montaje (sección 3).
+  - "Frecuencia de la fundamental": sirve para confirmar qué señal había. NO
+    sirve para la exactitud de frecuencia (el ADC usa el mismo reloj).
+  - "Todo lo que hay en la banda": es EL número cuando no hay señal (ruido).
+  - Columna con "(apagado)": ese canal no tenía señal. Ahí solo valen las filas
+    de ruido.
+  - "Separación L -> R": aparece sola cuando un canal está 40 dB o más por
+    debajo del otro. "debajo del ruido" quiere decir que no se llega a ver.
+  - "Rango dinámico": aparece solo si la señal está entre -75 y -45 dBFS.
+  - Si no hay señal, la planilla igual elige un "fundamental" (el pico más alto,
+    suele ser 50 Hz o 381 Hz) y calcula THD, SNR, etc. Esos números NO valen.
+
+
+================================================================================
+SECCIÓN 6.  LAS MEDIDAS, UNA POR UNA
+================================================================================
+Orden recomendado: M1 a M6 validan la "regla" (la cadena). Si alguna falla, NO
+seguir: los números del generador no valdrían nada. M7 a M11 miden el
+generador con el ADC. M12 a M14 se hacen con instrumentos. M10 y M15 son
+opcionales.
+
+"A_T" = amplitud de trabajo (63 % sin Rs, 100 % con Rs).
+
+--------------------------------------------------------------------------------
+M1. COMUNICACIÓN Y TRAMAS PERDIDAS
+--------------------------------------------------------------------------------
+Para qué:  asegurar que las muestras llegan todas a la PC.
+Montaje:   A.
+App:       L: «1 kHz exacto TABLA», A_T, «ON».
+Pasos:
+  1. Con el visor abierto y SIN captura en curso, apretar «Probar comunicación»
+     (ventana principal). En la barra de estado del visor aparece "PONG".
+  2. En el visor, «Iniciar captura». Dejar 30 segundos.
+  3. Leer en la barra de estado: "Tramas: N   Perdidas: 0 (0,0 %)".
+  4. «Detener captura».
+Esperado:  PONG y 0 perdidas.
+Anotar:    tabla 8.1.
+Cuidado:
+  - PONG no aparece si hay una captura o medición andando.
+  - Si hay pérdidas: cerrar programas pesados (navegador, IDE), probar otro
+    puerto USB, no usar hub, achicar la ventana del visor.
+
+--------------------------------------------------------------------------------
+M2. PISO DE RUIDO DEL ADC SOLO  (entradas a masa)
+--------------------------------------------------------------------------------
+Para qué:  es el límite de la regla. Nada de lo que se mida después puede ser
+           mejor que este número.
+Montaje:   B (las dos entradas a AGND a través del capacitor).
+App:       «OFF» en los dos canales.
+Visor:     «Tiempo fijo», Duración 5, Descartar 1.
+           DAC: «No tocar el DAC».
+Pasos:
+  1. «Iniciar medición». Esperar "Medición lista".
+  2. Mirar el registro: cada bloque tiene que decir DC muy cerca de 0
+     (+0.0000x) y pico chico (menos de 0.001).
+  3. De la planilla anotar "Todo lo que hay en la banda", L y R.
+  4. Tildar «Ponderación A», «Calcular métricas», anotar de nuevo.
+  5. Cambiar la banda a «20 Hz - 20 kHz», destildar «Ponderación A»,
+     «Calcular métricas», anotar. Volver la banda a 400 Hz - 20 kHz.
+Esperado (400 Hz - 20 kHz, sin ponderar):
+  - Ideal según el datasheet: unos -95 dBFS (con ponderación A, unos -99).
+  - El 08/10 en la protoboard dio unos -89 dBFS.
+  - Mejor que -90: bien. Entre -85 y -90: sirve, anotarlo. Peor que -85:
+    PARAR y revisar masas antes de seguir.
+Anotar:    tabla 8.2.
+Cuidado:
+  - Si el DC es +0.50000 y el pico 1.0: firmware viejo (regla 1). Recargar.
+  - Las filas THD, SNR, SFDR de esta planilla NO valen (no hay señal).
+  - En 20 Hz - 20 kHz da peor: entran los 50 Hz y un pico en 381 Hz (ruido
+    digital del propio equipo). Es esperable; anotarlo.
+  - Osciloscopio y frecuencímetro desconectados (regla 8).
+  - No apoyar la mano ni acercar el celular a la placa.
+
+--------------------------------------------------------------------------------
+M3. PISO DE RUIDO DE LA CADENA  (lazo armado, DAC en silencio)
+--------------------------------------------------------------------------------
+Para qué:  ver si el DAC y el cableado del lazo agregan ruido al del ADC.
+Montaje:   A.
+App:       «OFF» en los dos canales. «DAC encendido» TILDADO (el DAC tiene que
+           estar andando, mandando silencio).
+Visor:     igual que M2: DAC «No tocar el DAC».
+Pasos:     los mismos de M2.
+Esperado:  igual a M2, o hasta 1-2 dB peor.
+Anotar:    tabla 8.2.
+Cuidado:
+  - Si da más de 3 dB peor que M2, el ruido entra por el lazo o por el DAC:
+    acortar cables, revisar la masa entre la salida y la entrada.
+  - No confundir «OFF» del canal (silencio, lo correcto) con destildar «DAC
+    encendido» (apaga el conversor: otra medida distinta).
+
+--------------------------------------------------------------------------------
+M4. NIVEL DE TRABAJO Y NO RECORTE
+--------------------------------------------------------------------------------
+Para qué:  confirmar que la señal llega al ADC con el nivel previsto y sin
+           recortar. Fija el nivel de referencia de toda la sesión.
+Montaje:   A.
+App:       L: «1 kHz exacto TABLA», A_T, «Actualizar amplitud».
+           R: «OFF».
+Visor:     DAC «Disparar al iniciar», Canales del DAC «L»,
+           «Apagar el DAC al terminar» tildado.
+Pasos:
+  1. «Iniciar medición».
+  2. Anotar "Nivel de la fundamental" de L y la dispersión entre bloques.
+  3. Repetir con el canal R: en la app L «OFF», R «1 kHz exacto TABLA» a A_T;
+     en el visor Canales del DAC «R».
+Esperado:  el nivel de la tabla de la sección 3 (sin Rs y 63 %: -1,5 dBFS),
+           con +-1 dB de tolerancia. L y R parecidos entre sí (menos de 0,5 dB).
+Anotar:    tabla 8.3. Ese nivel pasa a ser el "nivel de referencia".
+Cuidado:
+  - Si da unos 6 dB menos de lo esperado: firmware viejo (regla 1).
+  - Si da +2,5 dBFS o aparece el aviso de recorte: quedó en 100 % sin Rs
+    (regla 2): repetir la puesta a punto.
+  - Si da unos 4 dB más de lo esperado: no se apretó «Actualizar amplitud».
+  - Si no hay señal: el canal quedó en «OFF» y el visor estaba en «No tocar el
+    DAC», o el cable del lazo está suelto.
+  - Si el nivel pasa de -0,5 dBFS, bajar la amplitud hasta quedar entre -1 y
+    -3 dBFS y usar ESA como A_T de acá en adelante.
+
+--------------------------------------------------------------------------------
+M5. LINEALIDAD DEL ATENUADOR
+--------------------------------------------------------------------------------
+Para qué:  comprobar que al pedir 6 dB menos salen 6 dB menos. Valida la
+           resolución de amplitud y que toda la cadena es lineal.
+Montaje:   A.
+App:       L: «1 kHz exacto TABLA». R «OFF».
+Visor:     como en M4 (Disparar, Canales «L»).
+Pasos:     medir con la amplitud en 63 %, 32 %, 16 % y 8 %, en ese orden.
+           En cada una: mover la barra, «Actualizar amplitud», «Iniciar
+           medición», anotar el "Nivel de la fundamental".
+Esperado:  cada escalón baja 6,0 dB respecto del anterior (pedidos: -4, -10,
+           -16 y -22 dB). Error menor que 0,1 dB.
+Anotar:    tabla 8.4.
+Cuidado:
+  - Los porcentajes tienen que ser EXACTOS (63, 32, 16, 8): usar las flechas.
+  - Importa la DIFERENCIA entre escalones, no el valor absoluto.
+  - Al terminar, volver la amplitud a A_T y «Actualizar amplitud».
+
+--------------------------------------------------------------------------------
+M6. CANALES CRUZADOS  (¿de quién es el defecto?)
+--------------------------------------------------------------------------------
+Para qué:  si un canal mide peor que el otro, saber si la culpa es del DAC
+           (generador) o del ADC (la regla).
+Montaje:   primero A, después C.
+App:       «1 kHz exacto TABLA» a A_T en el canal que se mide; el otro «OFF».
+Visor:     Disparar, Canales del DAC = el canal del DAC que genera.
+Pasos:
+  1. Montaje A: medir L (DAC L -> ADC L) y R (DAC R -> ADC R). Anotar THD+N y
+     los armónicos más altos (línea "Armónicos L (dBc)").
+  2. Desenchufar el USB, pasar al montaje C, volver a enchufar y REPETIR LA
+     PUESTA A PUNTO.
+  3. Generar con el DAC L: la señal aparece en la columna R de la planilla.
+     Generar con el DAC R: aparece en la columna L.
+  4. Volver al montaje A y repetir la puesta a punto.
+Cómo se lee:
+  - El defecto SIGUE al canal del DAC (aparece donde vaya esa salida): es del
+    generador.
+  - El defecto SE QUEDA en el canal del ADC: es de la regla.
+Anotar:    tabla 8.5.
+Cuidado:
+  - Cambiar cables con el equipo desenchufado.
+  - Con el lazo cruzado, la "separación" de la planilla no significa nada.
+
+--------------------------------------------------------------------------------
+M7. PUREZA DEL CANAL L  (THD, THD+N, SINAD, ENOB, SNR, SFDR) Y SEPARACIÓN L->R
+--------------------------------------------------------------------------------
+Para qué:  son las metas de pureza de la propuesta.
+Montaje:   A, con los DOS lazos conectados (el canal R también, aunque esté
+           callado: su entrada no puede quedar al aire).
+App:       L: «1 kHz exacto TABLA», A_T, «Actualizar amplitud».
+           R: «OFF»  (obligatorio: si R suena, no hay separación).
+Visor:     Disparar, Canales del DAC «L», Apagar al terminar tildado.
+           Banda «400 Hz - 20 kHz (datasheet)», sin ponderación A.
+Pasos:
+  1. «Iniciar medición». Verificar los tres chequeos de 5.2.
+  2. Verificar que la columna R diga "(apagado)" y que aparezca la fila
+     "Separación L -> R".
+  3. Anotar toda la columna L: nivel, THD (dB y %), THD+N (dB y %), SINAD,
+     ENOB, SNR (los dos), SFDR, frecuencia del peor espurio, y la separación.
+  4. Tildar «Ponderación A», «Calcular métricas», anotar la columna "pond. A".
+  5. Destildar «Ponderación A».
+  6. Repetir la medición dos veces más (tres en total) y anotar el THD+N de
+     cada una: tienen que coincidir dentro de 1 dB.
+Esperado:
+  - Mínimos de la propuesta: THD+N menor que -60 dB (0,1 %), SNR mayor que
+    80 dB, SFDR mayor que 70 dBc, separación mayor que 80 dB.
+  - Si todo anda bien, THD+N entre -80 y -92 dB. Mejor que eso no puede dar:
+    el ADC solo tiene -93 dB.
+Anotar:    tabla 8.6.
+Cuidado:
+  - Si no aparece la fila de separación, R no estaba apagado.
+  - "SNR (respecto del fondo de escala)" es el que se compara con el datasheet.
+  - Si el peor espurio cae en 50, 100, 150 Hz... es zumbido de red, no del
+    generador (probar a batería). Si cae en 381 Hz o múltiplos, es ruido
+    digital del equipo.
+  - Con ponderación A los números mejoran 2 o 3 dB: es normal. Anotar siempre
+    con cuál se midió.
+
+--------------------------------------------------------------------------------
+M8. PUREZA DEL CANAL R Y SEPARACIÓN R->L
+--------------------------------------------------------------------------------
+Igual que M7 con los canales invertidos:
+App:       R: «1 kHz exacto TABLA», A_T, «Actualizar amplitud».  L: «OFF».
+Visor:     Canales del DAC «R».
+Verificar: columna L con "(apagado)" y fila "Separación R -> L".
+Anotar:    tabla 8.6.
+
+--------------------------------------------------------------------------------
+M9. TABLA CONTRA ACUMULADOR  (la pregunta central del proyecto)
+--------------------------------------------------------------------------------
+Para qué:  decidir con datos si la síntesis por acumulador alcanza o si
+           conviene una tabla de frecuencia fija.
+Montaje:   A. NO tocar nada entre una medición y la otra.
+App:       canal L a A_T. R «OFF».
+Visor:     Disparar, Canales del DAC «L». Banda 400 Hz - 20 kHz, sin pond. A.
+Pasos:
+  1. L: forma de onda «seno» (primer ícono de la fila "Izq (L)"), Frecuencia
+     1000, «Aplicar frecuencia». Medir. Anotar SFDR, frecuencia del peor
+     espurio, THD+N y SNR.
+  2. L: «1 kHz exacto TABLA». Medir. Anotar lo mismo.
+  3. Repetir 1 y 2 dos veces más, alternando (seno, tabla, seno, tabla).
+  4. En cada medición mirar además el gráfico del espectro cerca de 10 kHz y
+     anotar si se ve un pico.
+Esperado:
+  - Seno por acumulador: un espurio en unos 10,1 kHz, a unos -78 dBc.
+  - Tabla: sin ese espurio.
+Anotar:    tabla 8.7.
+Cuidado:
+  - La frecuencia tiene que ser 1000 exacto y hay que apretar «Aplicar
+    frecuencia» (al volver de una señal fija, el casillero reaparece).
+  - Las dos señales con la MISMA amplitud y el mismo cableado: lo que vale es
+    la diferencia entre las dos.
+  - Si el "peor espurio" que informa la planilla es un armónico (2000, 3000 Hz)
+    o zumbido, el de truncación quedó tapado. Anotar igual el número y decir
+    qué se ve en 10,1 kHz en el gráfico.
+  - Si las tres repeticiones difieren más de 1 dB entre sí, la diferencia entre
+    tabla y acumulador no es confiable: revisar el montaje.
+
+--------------------------------------------------------------------------------
+M10. (OPCIONAL) 995,4 Hz POR PASO CONTRA 995,4 Hz POR TABLA
+--------------------------------------------------------------------------------
+Para qué:  mostrar el peor caso de truncación.
+Montaje:   A.
+App:       L a A_T, R «OFF».
+Visor:     Disparar, Canales «L». Banda «20 Hz - 48 kHz (todo)».
+Pasos:     medir «995,4 Hz PASO (trunca)» y después «995,4 Hz TABLA (limpia)».
+           Anotar SFDR y frecuencia del peor espurio.
+Esperado:  en PASO, un espurio en unos 47,8 kHz.
+Anotar:    tabla 8.7.
+Cuidado:
+  - Es CUALITATIVO: a 47,8 kHz los filtros del codec atenúan, así que el número
+    que llega no es el verdadero. Sirve para mostrar que existe.
+  - Volver la banda a 400 Hz - 20 kHz al terminar.
+
+--------------------------------------------------------------------------------
+M11. RANGO DINÁMICO  (método EIAJ, señal a -60 dB)
+--------------------------------------------------------------------------------
+Para qué:  la distancia entre el fondo de escala y lo más chico que se
+           distingue. Es la especificación principal de un conversor.
+Montaje:   A.
+Problema:  la app no baja de 1 % (-40 dB). Los -60 dB se ponen escribiendo el
+           registro del codec a mano, y para eso hay que cerrar la app un
+           momento (el puerto COM no se puede compartir).
+Pasos:
+  1. En la app: L «1 kHz exacto TABLA», R «OFF», salida «Simple».
+  2. Anotar el número de COM y CERRAR la app (las dos ventanas).
+  3. Abrir una consola (cmd) y ejecutar, cambiando COM5 por el COM anotado:
+
+     python -c "import serial,time; s=serial.Serial('COM5',115200,timeout=1); s.write(b'I2CW:65,135'+bytes([10])); time.sleep(0.3); s.close()"
+
+     (65 = registro de volumen del canal L; 135 = 0 dB menos 120 pasos de
+     0,5 dB = -60 dB. Para el canal R: I2CW:66,135)
+  4. Volver a abrir la app y «Conectar». NO apretar «Actualizar amplitud».
+  5. Clic en «1 kHz exacto TABLA» de L y en «Simple» (no cambian la amplitud
+     y dejan la app mostrando lo correcto). R «OFF».
+  6. Visor: Disparar, Canales «L», banda «20 Hz - 20 kHz», «Ponderación A»
+     tildada. «Iniciar medición».
+  7. Anotar "Nivel de la fundamental" y "Rango dinámico (EIAJ, señal -60)".
+  8. Cambiar la banda a 400 Hz - 20 kHz, «Calcular métricas», anotar también.
+  9. VOLVER A LA NORMALIDAD: poner la amplitud de L en 62 %, «Actualizar
+     amplitud»; después en A_T, «Actualizar amplitud». Destildar «Ponderación
+     A» y volver la banda a 400 Hz - 20 kHz.
+Esperado:  nivel de unos -57,5 dBFS sin Rs (unos -63 con Rs). Rango dinámico
+           entre 88 y 99 dB (datasheet: 99 dB el ADC, 104 dB el DAC).
+Anotar:    tabla 8.8.
+Cuidado:
+  - El paso 9 tiene trampa: el equipo solo reescribe el volumen cuando el
+    porcentaje CAMBIA. Si mandás directamente el mismo valor que tenía antes,
+    no hace nada y queda en -60 dB. Por eso primero 62 % y después A_T.
+    Confirmarlo repitiendo M4: el nivel tiene que volver al de referencia.
+  - La planilla va a decir una amplitud que no es (la de la barra de la app).
+    Anotar a mano "amplitud real: -60 dB por I2CW".
+  - Si la fila "Rango dinámico" sale vacía, el nivel no quedó entre -75 y
+    -45 dBFS: el comando no llegó. Repetir desde el paso 2.
+  - Mientras la app está cerrada no desenchufar el equipo (perdería todo).
+
+--------------------------------------------------------------------------------
+M12. EXACTITUD DE FRECUENCIA  (con frecuencímetro; el ADC NO sirve para esto)
+--------------------------------------------------------------------------------
+Para qué:  meta funcional: error menor que +-1 Hz en todo el rango.
+Por qué no con el ADC: mide con el mismo reloj que genera. Si el cristal está
+           corrido, la planilla igual dice 1000,00 Hz.
+Montaje:   D (VOUTL+ al frecuencímetro, masa a AGND, lazo desconectado).
+App:       L: forma «seno», amplitud 100 %, «Actualizar amplitud», «ON».
+           Salida «Simple».
+Pasos:     para 20, 100, 1000, 10000 y 20000 Hz:
+           escribir la frecuencia, «Aplicar frecuencia», esperar que la lectura
+           se estabilice y anotarla con todos sus dígitos.
+           Repetir para el canal R (VOUTR+).
+Cuentas:   error [Hz]  = f medida - f pedida
+           error [ppm] = 1 000 000 x error / f pedida
+Esperado:  el error en ppm es el mismo en todas las frecuencias (es el del
+           cristal). El punto más exigente es 20 kHz: ahí +-1 Hz son 50 ppm.
+Anotar:    tabla 8.9, con el modelo del frecuencímetro y el tiempo de compuerta.
+Cuidado:
+  - Tiempo de compuerta de 1 s o más (en 20 Hz, 10 s si el instrumento deja).
+  - Si la lectura baila con el seno, probar con la forma «cuadrada» a la misma
+    frecuencia: sale del mismo acumulador, así que la frecuencia es la misma.
+  - El canal tiene que estar en «ON»: una medición anterior del visor pudo
+    haberlo apagado («Apagar el DAC al terminar»).
+  - Un osciloscopio común NO alcanza para ver 1 Hz en 20 kHz.
+
+--------------------------------------------------------------------------------
+M13. AMPLITUD DE SALIDA  (con osciloscopio)
+--------------------------------------------------------------------------------
+Para qué:  verificar los 4 Vpp (simple) y 8 Vpp (diferencial) del fondo de
+           escala, y pasar de dBFS a volts.
+Montaje:   D, lazo desconectado.
+App:       «1 kHz exacto TABLA», «ON».
+Pasos:
+  1. Con un multímetro, medir VCC del codec (pin 24, unos 5 V). Anotarlo.
+  2. Salida «Simple», amplitud 100 %, «Actualizar amplitud». Medir el Vpp de
+     VOUTL+ y de VOUTR+. Medir también la continua (unos 2,5 V).
+  3. Amplitud 63 %, «Actualizar amplitud». Medir el Vpp.
+  4. Salida «Diferencial», amplitud 100 %. Canal 1 en VOUTL+, canal 2 en
+     VOUTL-, función CH1 - CH2. Medir el Vpp. Repetir con el canal R.
+  5. Volver a «Simple» y a A_T al terminar.
+Esperado:  simple 100 %: 0,8 x VCC (4,0 Vpp con 5,00 V).  63 %: 2,5 Vpp.
+           diferencial 100 %: 1,6 x VCC (8,0 Vpp).
+Anotar:    tabla 8.10.
+Cuidado:
+  - Regla 7: masa de las puntas SOLO en AGND.
+  - Puntas en x10 y el osciloscopio configurado en x10.
+  - Si VCC no son 5,00 V, el fondo de escala cambia en la misma proporción.
+    Por eso se anota VCC.
+
+--------------------------------------------------------------------------------
+M14. FORMAS DE ONDA  (con osciloscopio)
+--------------------------------------------------------------------------------
+Para qué:  meta funcional: senoidal, cuadrada, triangular y barrido, en los
+           dos canales y de forma independiente.
+Montaje:   D, un canal del osciloscopio en VOUTL+ y otro en VOUTR+.
+App:       Salida «Simple», amplitud 100 %, los dos canales «ON».
+Pasos:
+  1. L: seno 1000 Hz. R: seno 2000 Hz. Verificar que cada canal tiene su
+     frecuencia (independencia).
+  2. L: cuadrada, triangular (1000 Hz). Sacar una foto de cada una.
+  3. L: chirp. En el panel poner f inicial 200, f final 2000, duración 1,
+     «Aplicar chirp». Verificar que la frecuencia sube y vuelve a empezar.
+  4. L: «1 kHz exacto TABLA» y «60 Hz + 7 kHz MULTITONO». Foto.
+  5. Bajar la amplitud de L a 50 % y verificar que R no cambia.
+  6. Repetir 2 a 4 en el canal R.
+Esperado:  en la cuadrada y la triangular se ven ondulaciones cerca de los
+           flancos: es el filtro del DAC, es normal.
+Anotar:    tabla 8.11 (sí / no y el nombre de la foto).
+Cuidado:   regla 7. El lazo al ADC desconectado.
+
+--------------------------------------------------------------------------------
+M15. (OPCIONAL) MULTITONO E INTERMODULACIÓN
+--------------------------------------------------------------------------------
+Para qué:  ver si la cadena mezcla dos tonos (60 Hz + 7 kHz, relación 4:1).
+Montaje:   A.
+App:       L: «60 Hz + 7 kHz MULTITONO», A_T. R «OFF».
+Visor:     Disparar, Canales «L». Banda «20 Hz - 20 kHz».
+Pasos:     medir y guardar. Mirar en el gráfico del espectro los picos a los
+           costados de 7 kHz (7000 +- 60 Hz, 7000 +- 120 Hz).
+Anotar:    en observaciones: nombre del .npz y la altura de esos picos respecto
+           del de 7 kHz.
+Cuidado:
+  - La planilla NO calcula la intermodulación, y toma como "fundamental" los
+    60 Hz: sus filas de THD y SNR no valen para esta señal.
+  - Con la banda de 400 Hz los 60 Hz quedan afuera: usar 20 Hz - 20 kHz.
+
+
+================================================================================
+SECCIÓN 7.  SI ALGO DA RARO
+================================================================================
+
+ Síntoma                              Causa más probable         Qué hacer
+ ------------------------------------ -------------------------- --------------------------
+ Entrada a masa: DC +0.5, pico 1.0    Firmware viejo             Cargar el nuevo
+ Todo 6 dB más bajo de lo esperado    Firmware viejo             Cargar el nuevo
+ Aviso "puede estar recortando"       100 % sin Rs               Puesta a punto (sec. 4)
+ Nivel 4 dB más alto de lo esperado   Faltó «Actualizar          Apretarlo y repetir
+                                      amplitud»
+ No hay señal                         Canal en «OFF» con «No     «Disparar al iniciar», o
+                                      tocar el DAC»; cable       «ON»; revisar el lazo
+                                      suelto
+ Tramas perdidas                      PC ocupada, hub USB, se    Cerrar programas, otro
+                                      movió una ventana          puerto, no tocar
+ "Sin datos del STM32"                Firmware sin streaming, o  Recargar; desenchufar y
+                                      equipo colgado             volver a conectar
+ No conecta el COM                    Otro programa lo usa       Cerrar IDE / PuTTY / la
+                                                                 otra copia de la app
+ Piso peor que -85 dBFS               Masa larga, entrada al     Masa corta a AGND, PC a
+                                      aire, cargador enchufado   batería, montaje B bien
+ Picos en 50 / 100 / 150 Hz           Zumbido de red             Batería, sacar
+                                                                 instrumentos
+ Picos en 381 Hz y múltiplos          Ruido digital del equipo   Anotarlo; alimentación y
+                                                                 masa analógica separadas
+ No aparece "Separación"              El otro canal está         «OFF» en ese canal
+                                      encendido
+ "Rango dinámico" vacío               Nivel fuera de -75..-45    Repetir el I2CW (M11)
+ Después de M11 el nivel no vuelve    Se mandó el mismo % de     Mandar 62 % y después A_T
+                                      antes
+ Dispersión mayor que 0,1 dB          Falso contacto, algo se    Revisar cables, repetir
+                                      movió
+ Un canal mide peor que el otro       DAC o ADC de ese canal     M6 (canales cruzados)
+ La app y el OLED no coinciden        Se tocó el teclado o se    Vale el OLED; puesta a
+                                      reabrió la app             punto
+
+
+================================================================================
+SECCIÓN 8.  TABLAS PARA COMPLETAR
+================================================================================
+
+8.0 DATOS DE LA SESIÓN
++--------------------------------------+---------------------------------------+
+| Fecha y hora                         |                                       |
+| Quiénes miden                        |                                       |
+| Placa (protoboard / perforada)       |                                       |
+| Firmware cargado (rama y fecha)      |                                       |
+| Rs en serie (valor, o "no hay")      |                                       |
+| Capacitor de entrada (valor)         |                                       |
+| Amplitud de trabajo A_T [%]          |                                       |
+| VCC del codec medido [V]             |                                       |
+| PC a batería (sí / no)               |                                       |
+| Puerto COM                           |                                       |
+| Puesta a punto hecha (sí / no)       |                                       |
++--------------------------------------+---------------------------------------+
+
+8.1 M1 - COMUNICACIÓN
++--------------------------------------+--------------+------------+----------+
+| Chequeo                              | Esperado     | Medido     | ¿OK?     |
++--------------------------------------+--------------+------------+----------+
+| «Probar comunicación»                | PONG         |            |          |
+| Tramas perdidas en 30 s              | 0            |            |          |
++--------------------------------------+--------------+------------+----------+
+
+8.2 M2 y M3 - PISO DE RUIDO  ("Todo lo que hay en la banda", en dBFS)
++-----------------------------+-----------+-----------+-----------+-----------+
+|                             | M2: ADC solo (a masa) | M3: cadena (lazo)     |
+| Banda y ponderación         |     L     |     R     |     L     |     R     |
++-----------------------------+-----------+-----------+-----------+-----------+
+| 400 Hz - 20 kHz, sin pond.  |           |           |           |           |
+| 400 Hz - 20 kHz, pond. A    |           |           |           |           |
+| 20 Hz - 20 kHz, sin pond.   |           |           |           |           |
++-----------------------------+-----------+-----------+-----------+-----------+
+| DC del registro             |           |           |           |           |
+| Pico más alto [Hz]          |           |           |           |           |
+| Tramas perdidas             |                       |                       |
+| Archivo .npz                |                       |                       |
++-----------------------------+-----------------------+-----------------------+
+Referencia: ideal -95 (sin pond.) y -99 (pond. A). Peor que -85: parar.
+
+8.3 M4 - NIVEL DE TRABAJO  (1 kHz exacto TABLA a A_T)
++---------+-----------------+----------------+-------------+---------+---------+
+| Canal   | Esperado [dBFS] | Medido [dBFS]  | Dispersión  | ¿Aviso  | .npz    |
+|         |                 |                | [dB]        | recorte?|         |
++---------+-----------------+----------------+-------------+---------+---------+
+| L       |                 |                |             |         |         |
+| R       |                 |                |             |         |         |
++---------+-----------------+----------------+-------------+---------+---------+
+Nivel de referencia de la sesión:  L = ________ dBFS    R = ________ dBFS
+
+8.4 M5 - LINEALIDAD DEL ATENUADOR  (canal ____)
++--------+-------------+---------------+-----------------+------------+-------+
+| Ampl.  | Pedido [dB] | Nivel medido  | Escalón respecto| Error [dB] | .npz  |
+|        |             | [dBFS]        | del anterior    | (ideal 0)  |       |
++--------+-------------+---------------+-----------------+------------+-------+
+| 63 %   |    -4,0     |               |       --        |     --     |       |
+| 32 %   |   -10,0     |               |                 |            |       |
+| 16 %   |   -16,0     |               |                 |            |       |
+|  8 %   |   -22,0     |               |                 |            |       |
++--------+-------------+---------------+-----------------+------------+-------+
+Error = escalón medido - (-6,0). Tiene que ser menor que 0,1 dB en valor absoluto.
+
+8.5 M6 - CANALES CRUZADOS
++----------------------+------------+--------------------------+--------------+
+| Camino               | THD+N [dB] | Armónicos más altos      | .npz         |
+|                      |            | (cuál y cuánto, en dBc)  |              |
++----------------------+------------+--------------------------+--------------+
+| DAC L -> ADC L       |            |                          |              |
+| DAC R -> ADC R       |            |                          |              |
+| DAC L -> ADC R       |            |                          |              |
+| DAC R -> ADC L       |            |                          |              |
++----------------------+------------+--------------------------+--------------+
+El defecto sigue al:   DAC ( )    ADC ( )    no hay diferencia ( )
+
+8.6 M7 y M8 - PUREZA  (1 kHz exacto TABLA a A_T, el otro canal apagado)
++----------------------+-----------+-----------+-----------+-----------+-----------+----------+
+| Métrica              | L sin     | L pond. A | R sin     | R pond. A | Mínimo    | Techo    |
+|                      | ponderar  |           | ponderar  |           | propuesta | codec    |
++----------------------+-----------+-----------+-----------+-----------+-----------+----------+
+| Nivel [dBFS]         |           |           |           |           |    --     |    --    |
+| THD [dB]             |           |           |           |           |    --     |    --    |
+| THD [%]              |           |           |           |           |    --     |    --    |
+| THD+N [dB]           |           |           |           |           |  < -60    |   -94    |
+| THD+N [%]            |           |           |           |           |  < 0,1    |  0,002   |
+| SINAD [dB]           |           |           |           |           |    --     |    94    |
+| ENOB [bits]          |           |           |           |           |    --     |   15,3   |
+| SNR resp. señal [dB] |           |           |           |           |  > 80     |   105    |
+| SNR resp. fondo [dB] |           |           |           |           |    --     |   105    |
+| SFDR [dBc]           |           |           |           |           |  > 70     | no espec.|
+| Peor espurio [Hz]    |           |           |           |           |    --     |    --    |
+| Separación [dB]      | L->R:     |           | R->L:     |           |  > 80     |   103    |
++----------------------+-----------+-----------+-----------+-----------+-----------+----------+
+| Tramas perdidas      |                       |                       |
+| Dispersión [dB]      |                       |                       |
+| Archivo .npz         |                       |                       |
++----------------------+-----------------------+-----------------------+
+Repetibilidad del THD+N (sin ponderar), tres mediciones seguidas:
+   L:  1) ________   2) ________   3) ________      R:  1) ________   2) ________   3) ________
+El techo es del DAC solo. En lazo, el límite práctico es el ADC: THD+N -93 dB, SNR 99 dB.
+
+8.7 M9 y M10 - TABLA CONTRA ACUMULADOR  (canal L a A_T)
++-------------------------------+-----------+--------------+-----------+----------+------------+-------+
+| Señal                         | SFDR      | Peor espurio | THD+N     | SNR      | ¿Pico en   | .npz  |
+|                               | [dBc]     | [Hz]         | [dB]      | [dB]     | ~10,1 kHz? |       |
++-------------------------------+-----------+--------------+-----------+----------+------------+-------+
+| Seno (acumulador) 1000 Hz  #1 |           |              |           |          |            |       |
+| 1 kHz exacto TABLA         #1 |           |              |           |          |            |       |
+| Seno (acumulador) 1000 Hz  #2 |           |              |           |          |            |       |
+| 1 kHz exacto TABLA         #2 |           |              |           |          |            |       |
+| Seno (acumulador) 1000 Hz  #3 |           |              |           |          |            |       |
+| 1 kHz exacto TABLA         #3 |           |              |           |          |            |       |
++-------------------------------+-----------+--------------+-----------+----------+------------+-------+
+| Promedio seno                 |           |      --      |           |          |     --     |  --   |
+| Promedio tabla                |           |      --      |           |          |     --     |  --   |
+| Diferencia (tabla - seno)     |           |      --      |           |          |     --     |  --   |
++-------------------------------+-----------+--------------+-----------+----------+------------+-------+
+| 995,4 Hz PASO  (20 Hz-48 kHz) |           |              |           |          |     --     |       |
+| 995,4 Hz TABLA (20 Hz-48 kHz) |           |              |           |          |     --     |       |
++-------------------------------+-----------+--------------+-----------+----------+------------+-------+
+Esperado: acumulador con espurio en ~10,1 kHz a ~-78 dBc; tabla sin ese espurio.
+
+8.8 M11 - RANGO DINÁMICO  (señal a -60 dB por I2CW, ponderación A)
++---------+------------------+-----------------+-----------------+-----------+-------+
+| Canal   | Nivel medido     | Rango dinámico  | Rango dinámico  | Datasheet | .npz  |
+|         | [dBFS]           | 20 Hz-20 kHz, A | 400 Hz-20 kHz, A| ADC / DAC |       |
++---------+------------------+-----------------+-----------------+-----------+-------+
+| L       |                  |                 |                 | 99 / 104  |       |
+| R       |                  |                 |                 | 99 / 104  |       |
++---------+------------------+-----------------+-----------------+-----------+-------+
+¿Se volvió la amplitud a A_T (62 % y después A_T)?  sí ( )   Nivel verificado: ______ dBFS
+
+8.9 M12 - EXACTITUD DE FRECUENCIA
+Frecuencímetro: ____________________   Tiempo de compuerta: ________
++-------------+------------------+-------------+-------------+------------------+-------------+
+| f pedida    | L: f medida [Hz] | L: error    | L: error    | R: f medida [Hz] | R: error    |
+|             |                  | [Hz]        | [ppm]       |                  | [Hz]        |
++-------------+------------------+-------------+-------------+------------------+-------------+
+| 20 Hz       |                  |             |             |                  |             |
+| 100 Hz      |                  |             |             |                  |             |
+| 1 000 Hz    |                  |             |             |                  |             |
+| 10 000 Hz   |                  |             |             |                  |             |
+| 20 000 Hz   |                  |             |             |                  |             |
++-------------+------------------+-------------+-------------+------------------+-------------+
+¿Error menor que +-1 Hz en todas?   sí ( )   no ( )
+
+8.10 M13 - AMPLITUD DE SALIDA  (osciloscopio: ____________________)
++----------------------------------+----------------+-------------+-------------+
+| Condición (1 kHz)                | Esperado       | L medido    | R medido    |
++----------------------------------+----------------+-------------+-------------+
+| VCC del codec                    | 5,0 V          |             |             |
+| Simple, 100 %                    | 0,8 x VCC      |             |             |
+| Simple, 63 %                     | ~2,5 Vpp       |             |             |
+| Continua en la salida (simple)   | ~2,5 V         |             |             |
+| Diferencial, 100 % (CH1 - CH2)   | 1,6 x VCC      |             |             |
++----------------------------------+----------------+-------------+-------------+
+
+8.11 M14 - FORMAS DE ONDA  (sí / no, y nombre de la foto)
++----------------------------------+------------------+------------------+
+| Forma                            | Canal L          | Canal R          |
++----------------------------------+------------------+------------------+
+| Senoidal                         |                  |                  |
+| Cuadrada                         |                  |                  |
+| Triangular                       |                  |                  |
+| Chirp (200 a 2000 Hz en 1 s)     |                  |                  |
+| 1 kHz exacto TABLA               |                  |                  |
+| Multitono 60 Hz + 7 kHz          |                  |                  |
++----------------------------------+------------------+------------------+
+| Frecuencias independientes       | sí ( )  no ( )                      |
+| Amplitudes independientes        | sí ( )  no ( )                      |
++----------------------------------+-------------------------------------+
+
+8.12 OBSERVACIONES  (todo lo raro que se vio, con la hora y el .npz)
+______________________________________________________________________________
+______________________________________________________________________________
+______________________________________________________________________________
+______________________________________________________________________________
+______________________________________________________________________________
+
+================================================================================

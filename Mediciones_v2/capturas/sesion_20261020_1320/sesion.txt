@@ -1,0 +1,68 @@
+SESION 2026-10-20 13:20   puerto COM5   carpeta C:\Users\Esteb\Desktop\Facu\2026\SEGUNDO CUATRI\Proyecto final\3_Integracion_ADC_DAC\Mediciones_v2\capturas\sesion_20261020_1320
+Montaje A (lazo directo). No tocar nada hasta que termine (entre 7 y 10 minutos).
+
+Prueba en estereo: 160 tramas perdidas -> esta PC no llega: se mide UN CANAL POR VEZ (la separacion sale de capturas extra del otro canal).
+
+M3  piso de ruido de la cadena (DAC encendido, canales en silencio)
+  M3_cadena_1_L      10 s   perdidas 0   dato directo  RMS L  -93.8 dBFS
+  M3_cadena_1_R      10 s   perdidas 0   dato directo  RMS R  -93.5 dBFS
+  M3_cadena_2_L      10 s   perdidas 0   dato directo  RMS L  -93.8 dBFS
+  M3_cadena_2_R      10 s   perdidas 0   dato directo  RMS R  -93.5 dBFS
+  M3_cadena_3_L      10 s   perdidas 0   dato directo  RMS L  -93.8 dBFS
+  M3_cadena_3_R      10 s   perdidas 0   dato directo  RMS R  -93.5 dBFS
+
+M4  nivel de trabajo (que no recorte)
+  M4_L_63             5 s   perdidas 0   dato directo  pico   -1.7 dBFS
+  M4_R_63             5 s   perdidas 0   dato directo  pico   -1.5 dBFS
+  amplitud de trabajo: 63 %
+
+M5  linealidad (L, 1 kHz por tabla)
+  M5_63               5 s   perdidas 0   dato directo  pico   -1.7 dBFS
+  M5_32               5 s   perdidas 0   dato directo  pico   -7.7 dBFS
+  M5_16               5 s   perdidas 0   dato directo  pico  -13.8 dBFS
+  M5_08               5 s   perdidas 0   dato directo  pico  -19.8 dBFS
+
+M7  pureza L y separacion L->R
+  M7_L_1             10 s   perdidas 0   dato directo  pico   -1.7 dBFS
+  M7_L_1_otro        10 s   perdidas 0   dato directo  RMS R  -93.5 dBFS
+  M7_L_2             10 s   perdidas 0   dato directo  pico   -1.7 dBFS
+  M7_L_2_otro        10 s   perdidas 0   dato directo  RMS R  -93.5 dBFS
+  M7_L_3             10 s   perdidas 0   dato directo  pico   -1.7 dBFS
+  M7_L_3_otro        10 s   perdidas 0   dato directo  RMS R  -93.4 dBFS
+
+M8  pureza R y separacion R->L
+  M8_R_1             10 s   perdidas 0   dato directo  pico   -1.5 dBFS
+  M8_R_1_otro        10 s   perdidas 0   dato directo  RMS L  -94.0 dBFS
+  M8_R_2             10 s   perdidas 0   dato directo  pico   -1.5 dBFS
+  M8_R_2_otro        10 s   perdidas 0   dato directo  RMS L  -93.9 dBFS
+  M8_R_3             10 s   perdidas 0   dato directo  pico   -1.5 dBFS
+  M8_R_3_otro        10 s   perdidas 0   dato directo  RMS L  -94.0 dBFS
+
+M9  seno por acumulador contra tabla (alternados)
+  M9_seno_1          10 s   perdidas 0   dato directo  pico   -1.7 dBFS
+  M9_tabla_1         10 s   perdidas 0   dato directo  pico   -1.7 dBFS
+  M9_seno_2          10 s   perdidas 0   dato directo  pico   -1.7 dBFS
+  M9_tabla_2         10 s   perdidas 0   dato directo  pico   -1.7 dBFS
+  M9_seno_3          10 s   perdidas 0   dato directo  pico   -1.7 dBFS
+  M9_tabla_3         10 s   perdidas 0   dato directo  pico   -1.7 dBFS
+
+M10 995,4 Hz por paso contra por tabla
+  M10_paso           10 s   perdidas 0   dato directo  pico   -1.7 dBFS
+  M10_tabla          10 s   perdidas 0   dato directo  pico   -1.7 dBFS
+
+M15 multitono 60 Hz + 7 kHz
+  M15_multi          10 s   perdidas 0   dato directo  pico   -1.8 dBFS
+
+M11 rango dinamico (senal a -60 dB por I2C)
+  M11_prep_L          1 s   perdidas 0   dato directo  pico   -1.7 dBFS
+  M11_L_-60dB        10 s   perdidas 0   dato directo  pico  -57.3 dBFS
+  M11_prep_R          1 s   perdidas 0   dato directo  pico   -1.5 dBFS
+  M11_R_-60dB        10 s   perdidas 0   dato directo  pico  -57.2 dBFS
+
+M4  control final
+  M4_L_final          5 s   perdidas 0   dato directo  pico   -1.7 dBFS
+  M4_R_final          5 s   perdidas 0   dato directo  pico   -1.5 dBFS
+
+TERMINADO en 7.3 min.
+Dato del ADC en la sesion: directo  (corrido = llego corrido un bit y el firmware lo corrigio; directo = llego bien)
+Sin problemas.

@@ -1,0 +1,69 @@
+RESUMEN DE LA SESION  C:\Users\Esteb\Desktop\Facu\2026\SEGUNDO CUATRI\Proyecto final\3_Integracion_ADC_DAC\Mediciones_v2\capturas\sesion_20261020_1320
+Tramas perdidas en total: 0 (tiene que ser 0)
+Dato del ADC: directo  (corrido = corregido por el firmware; directo = llego bien; ? = firmware viejo, puede estar x2)
+
+M3  PISO DE RUIDO DE LA CADENA (DAC encendido en silencio), promedio de las capturas
+  L: 20-20k -94.9 | 400-20k -95.5 | A -97.2 | sin red -94.9 | A sin red -97.2 dBFS
+     RANGO DINAMICO (A): 97.2 dB  (sin la red: 97.2 dB)   hoja de datos ADC: tip. 99, min. 95
+  R: 20-20k -94.3 | 400-20k -95.1 | A -96.7 | sin red -94.5 | A sin red -96.7 dBFS
+     RANGO DINAMICO (A): 96.7 dB  (sin la red: 96.7 dB)   hoja de datos ADC: tip. 99, min. 95
+
+M4  NIVEL DE TRABAJO (1 kHz por tabla)
+  M4_L_63      L  amplitud 63 %  nivel -1.72 dBFS
+  M4_R_63      R  amplitud 63 %  nivel -1.53 dBFS
+  M4_L_final   L  amplitud 63 %  nivel -1.72 dBFS
+  M4_R_final   R  amplitud 63 %  nivel -1.53 dBFS
+  Esperado: ~-1,5 dBFS al 63 % (sin Rs), L y R a menos de 0,5 dB; el control final igual al inicial.
+
+M5  LINEALIDAD DEL ATENUADOR (canal L)
+   63 %  pedido   -4.0 dB  nivel   -1.72 dBFS
+   32 %  pedido  -10.0 dB  nivel   -7.72 dBFS   escalon  -6.01 dB (esperado  -6.0, error -0.01)
+   16 %  pedido  -16.0 dB  nivel  -13.76 dBFS   escalon  -6.04 dB (esperado  -6.0, error -0.04)
+    8 %  pedido  -22.0 dB  nivel  -19.77 dBFS   escalon  -6.01 dB (esperado  -6.0, error -0.01)
+  Esperado: error de cada escalon menor que 0,1 dB.
+
+M7  PUREZA canal L, 1 kHz por tabla (3 capturas: promedio [min. a max.])
+  nivel             -1.7 [-1.7 a -1.7] dBFS
+  THD               -100.3 [-100.4 a -100.3] dB
+  THD+N 400-20k     -90.1 [-90.2 a -90.0] dB     (20-20k: -89.7 [-89.9 a -89.7], A: -90.6 [-90.8 a -90.5])
+  SNR   400-20k     90.5 [90.4 a 90.6] dB     (20-20k: 90.1 [90.0 a 90.3], A: 91.2 [91.1 a 91.4])
+  SINAD 400-20k     90.1 [90.0 a 90.2] dB   ENOB 14.7 [14.7 a 14.7] bits
+  SFDR  400-20k     100.4 [100.0 a 101.2] dB   (peor componente en 997, 1003, 997 Hz)
+  separacion        124.8 [123.8 a 126.2] dB
+  Propuesta (minimo): THD+N < -60 dB, SNR > 80 dB, SFDR > 70 dB, separacion > 80 dB.
+  Hoja de datos ADC: THD+N -93 dB tip. (-85 max.), separacion 96 dB tip.
+
+M8  PUREZA canal R, 1 kHz por tabla (3 capturas: promedio [min. a max.])
+  nivel             -1.5 [-1.5 a -1.5] dBFS
+  THD               -106.4 [-106.6 a -106.4] dB
+  THD+N 400-20k     -89.8 [-89.9 a -89.7] dB     (20-20k: -89.4 [-89.5 a -89.3], A: -90.4 [-90.5 a -90.3])
+  SNR   400-20k     89.9 [89.8 a 90.0] dB     (20-20k: 89.5 [89.4 a 89.6], A: 90.6 [90.4 a 90.6])
+  SINAD 400-20k     89.8 [89.7 a 89.9] dB   ENOB 14.6 [14.6 a 14.6] bits
+  SFDR  400-20k     99.8 [99.2 a 100.0] dB   (peor componente en 1003, 997, 1003 Hz)
+  separacion        130.7 [128.2 a 133.0] dB
+  Propuesta (minimo): THD+N < -60 dB, SNR > 80 dB, SFDR > 70 dB, separacion > 80 dB.
+  Hoja de datos ADC: THD+N -93 dB tip. (-85 max.), separacion 96 dB tip.
+
+M9  SENO POR ACUMULADOR CONTRA TABLA (1 kHz, canal L)
+                       seno (acumulador)         tabla
+  THD+N 400-20k        -74.8 [-74.8 a -74.8]    -90.0 [-90.2 a -89.9] dB
+  SNR 400-20k          74.8 [74.8 a 74.8]       90.5 [90.3 a 90.6] dB
+  SFDR 400-20k         78.3 [78.3 a 78.3]       100.4 [99.8 a 101.3] dB
+  peor NO armonico     -78.3 [-78.3 a -78.3]    -114.9 [-115.1 a -114.6] dBc
+    en                 12125, 12125, 12125      619, 619, 1382 Hz
+  Esperado: con el seno por acumulador, un espurio de ~-78 dBc cerca de 10,1 kHz; con la tabla no.
+
+M10 995,4 Hz POR PASO CONTRA POR TABLA (mayor componente entre 46 y 48,8 kHz)
+  M10_paso     -81.2 dBc en 47833 Hz
+  M10_tabla   -126.0 dBc en 46784 Hz
+  Esperado: en "paso" un pico en ~47,8 kHz que en "tabla" no esta (cualitativo: el filtro del codec atenua ahi).
+
+M15 MULTITONO 60 Hz + 7 kHz: bandas laterales respecto del tono de 7 kHz
+  7000 +- 60 Hz: -98.0 dBc     7000 +- 120 Hz: -99.8 dBc
+  Cuanto mas abajo, menos intermodulacion (mezcla entre los dos tonos).
+
+M11 RANGO DINAMICO (EIAJ: senal a -60 dB, 20 Hz-20 kHz, ponderado A)
+  L: nivel -58.0 dBFS  ->  RANGO DINAMICO 96.8 dB (A)   (sin ponderar 94.7 dB)
+  R: nivel -57.8 dBFS  ->  RANGO DINAMICO 96.4 dB (A)   (sin ponderar 94.2 dB)
+  Hoja de datos ADC: tip. 99 dB, min. 95 dB (a fs = 48 kHz).
+

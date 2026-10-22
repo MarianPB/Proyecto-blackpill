@@ -1,0 +1,214 @@
+================================================================================
+   COMANDOS PARA LAS MEDICIONES  -  grabar en Python, analizar en MATLAB
+================================================================================
+
+LO MÁS FÁCIL: con el montaje A armado, correr  python medir_todo.py  (o doble
+clic en MEDIR_TODO.bat; en Linux  python3 medir_todo.py). Hace TODAS las
+medidas de abajo que usan el montaje A, una atrás de otra (~6 min), y al final
+las analiza sola: el resultado queda en capturas\sesion_...\resumen.txt.
+Los comandos sueltos de este archivo sirven para repetir una medida aislada.
+
+Todo se corre desde una consola abierta en esta carpeta (Mediciones_v2), con la
+app cerrada (ocupa el puerto). Las capturas quedan en capturas\.
+
+  grabar_piso.py   ruido sin señal (M2, M3)      -> matlab\piso_de_ruido.m
+  grabar.py        cualquier medida con señal    -> matlab\analizar_captura.m
+
+Cada comando de grabar.py manda TODA la configuración (SE, ADC, DAC, onda,
+amplitud, canales): no depende de cómo quedó el equipo antes.
+
+Cómo se lee cada captura con señal: abrir matlab\analizar_captura.m, poner
+canal = 'l' o 'r' (el canal que TIENE la señal), Run y elegir el archivo.
+Imprime THD, THD+N, SINAD, SNR, ENOB y SFDR en tres columnas (400 Hz-20 kHz,
+20 Hz-20 kHz y 20 Hz-20 kHz ponderado A) y la separación con el otro canal.
+
+
+--------------------------------------------------------------------------------
+CONFIGURACIÓN FIJA (la que dio las mediciones buenas del 20/10)
+--------------------------------------------------------------------------------
+  - Firmware Blackpill_codec_USB_FD con FRAMES_HALF 256 y los pines del I2S
+    en LOW.
+  - La PC que no pierde tramas. Si una captura dice "tramas perdidas" > 0,
+    se repite.
+  - Codec alimentado con fuente separada, masas unidas en un solo punto.
+  - Encendido: primero la fuente del codec, después el USB de la Black Pill.
+  - Los cables se cambian con todo desenchufado.
+
+
+--------------------------------------------------------------------------------
+LOS MONTAJES  (pines del PCM3060: VOUTL+ = 20, VOUTR+ = 18, VINL = 25,
+               VINR = 26, AGND = 22 y 23)
+--------------------------------------------------------------------------------
+Cada entrada VIN tiene su capacitor en serie. "Punto de entrada" = la pata del
+capacitor que NO toca el pin VIN. El capacitor queda SIEMPRE puesto.
+
+  MONTAJE B (entradas a masa)  -> solo para M2
+      AGND -------||---> VINL          AGND -------||---> VINR
+
+  MONTAJE A (lazo directo)     -> todas las demás
+      VOUTL+ -----||---> VINL          VOUTR+ -----||---> VINR
+      Se saca el cable de masa del punto de entrada y en su lugar va la salida
+      "+" del DAC de ese canal. VOUTL- y VOUTR- quedan sin conectar.
+      Los DOS lazos conectados siempre, aunque un canal esté en silencio.
+
+  MONTAJE C (lazo cruzado)     -> solo para M6
+      VOUTL+ -----||---> VINR          VOUTR+ -----||---> VINL
+
+  PROHIBIDO: un cable del pin VIN directo a masa o a VOUT (saltando el
+  capacitor), y dejar una entrada al aire.
+
+
+--------------------------------------------------------------------------------
+M2. PISO DE RUIDO DEL ADC SOLO                                      montaje B
+--------------------------------------------------------------------------------
+  python grabar_piso.py
+
+  Hacerla 3 veces. MATLAB: piso_de_ruido.m.
+  Anotar: los cinco valores de la tabla y el RANGO DINÁMICO (A).
+  Referencia 20/10: 400 Hz-20 kHz -91,7 dBFS; rango dinámico A 85 dB
+  (94 dB sin la red). Hoja de datos: típ. 99 dB, mín. 95 dB.
+
+
+--------------------------------------------------------------------------------
+M3. PISO DE RUIDO DE LA CADENA (DAC encendido mandando silencio)   montaje A
+--------------------------------------------------------------------------------
+  python grabar_piso.py 10 cadena
+
+  Hacerla 3 veces. MATLAB: piso_de_ruido.m (los archivos se llaman
+  piso_cadena_...).
+  Esperado: igual a M2 o hasta 1-2 dB peor. Más de 3 dB peor: el ruido entra
+  por el lazo o por el DAC.
+
+
+--------------------------------------------------------------------------------
+M4. NIVEL DE TRABAJO Y NO RECORTE                                   montaje A
+--------------------------------------------------------------------------------
+  Canal L:
+  python grabar.py --nombre M4_L --seg 5 --cmd SE --cmd ADC:1 --cmd DAC:1 --cmd LWAVE:4 --cmd LAMP:63 --cmd RAMP:63 --cmd LON --cmd ROFF
+
+  Canal R:
+  python grabar.py --nombre M4_R --seg 5 --cmd SE --cmd ADC:1 --cmd DAC:1 --cmd RWAVE:4 --cmd LAMP:63 --cmd RAMP:63 --cmd RON --cmd LOFF
+
+  MATLAB: analizar_captura.m (canal 'l' para M4_L, 'r' para M4_R).
+  Anotar: "nivel" del tono.
+  Esperado: unos -1,5 dBFS (+-1 dB), L y R a menos de 0,5 dB entre sí.
+  Si el "pico de la señal" pasa de -0,5 dBFS, puede estar recortando: bajar
+  LAMP/RAMP (por ejemplo a 56) y usar ESE valor en todas las medidas
+  siguientes en lugar de 63.
+
+
+--------------------------------------------------------------------------------
+M5. LINEALIDAD DEL ATENUADOR                                        montaje A
+--------------------------------------------------------------------------------
+  python grabar.py --nombre M5_63 --seg 5 --cmd SE --cmd ADC:1 --cmd DAC:1 --cmd LWAVE:4 --cmd LAMP:63 --cmd LON --cmd ROFF
+  python grabar.py --nombre M5_32 --seg 5 --cmd SE --cmd ADC:1 --cmd DAC:1 --cmd LWAVE:4 --cmd LAMP:32 --cmd LON --cmd ROFF
+  python grabar.py --nombre M5_16 --seg 5 --cmd SE --cmd ADC:1 --cmd DAC:1 --cmd LWAVE:4 --cmd LAMP:16 --cmd LON --cmd ROFF
+  python grabar.py --nombre M5_08 --seg 5 --cmd SE --cmd ADC:1 --cmd DAC:1 --cmd LWAVE:4 --cmd LAMP:8 --cmd LON --cmd ROFF
+
+  MATLAB: analizar_captura.m, canal 'l'. Anotar el "nivel" de cada una.
+  Esperado: cada escalón 6,0 dB más abajo que el anterior (error < 0,1 dB).
+  Importa la diferencia entre escalones, no el valor absoluto.
+
+
+--------------------------------------------------------------------------------
+M7. PUREZA DEL CANAL L Y SEPARACIÓN L -> R                          montaje A
+--------------------------------------------------------------------------------
+  python grabar.py --nombre M7_L_1k --seg 10 --cmd SE --cmd ADC:1 --cmd DAC:1 --cmd LWAVE:4 --cmd LAMP:63 --cmd LON --cmd ROFF
+
+  Hacerla 3 veces. MATLAB: analizar_captura.m, canal 'l'.
+  Anotar: nivel, THD, THD+N, SINAD, ENOB, SNR, SFDR (las tres columnas), el
+  peor componente, los armónicos y la SEPARACIÓN.
+  Mínimos de la propuesta: THD+N < -60 dB, SNR > 80 dB, SFDR > 70 dB,
+  separación > 80 dB. Hoja de datos del ADC: THD+N -93 dB, separación 96 dB.
+  Ojo: mientras siga el zumbido de red, la columna 20 Hz-20 kHz queda limitada
+  por el 50 Hz (THD+N y SNR no pueden dar mejor que ~66 dB). Para el codec,
+  mirar la columna 400 Hz-20 kHz, y aclararlo en el informe.
+
+
+--------------------------------------------------------------------------------
+M8. PUREZA DEL CANAL R Y SEPARACIÓN R -> L                          montaje A
+--------------------------------------------------------------------------------
+  python grabar.py --nombre M8_R_1k --seg 10 --cmd SE --cmd ADC:1 --cmd DAC:1 --cmd RWAVE:4 --cmd RAMP:63 --cmd RON --cmd LOFF
+
+  Hacerla 3 veces. MATLAB: analizar_captura.m, canal 'r'. Anotar lo mismo
+  que en M7.
+
+
+--------------------------------------------------------------------------------
+M6. CANALES CRUZADOS (solo si L y R dan distinto en M7/M8)          montaje C
+--------------------------------------------------------------------------------
+  Con el montaje C, el DAC L entra al ADC R y viceversa:
+
+  python grabar.py --nombre M6_dacL_adcR --seg 10 --cmd SE --cmd ADC:1 --cmd DAC:1 --cmd LWAVE:4 --cmd LAMP:63 --cmd LON --cmd ROFF
+  python grabar.py --nombre M6_dacR_adcL --seg 10 --cmd SE --cmd ADC:1 --cmd DAC:1 --cmd RWAVE:4 --cmd RAMP:63 --cmd RON --cmd LOFF
+
+  MATLAB: la primera con canal 'r', la segunda con canal 'l'.
+  Cómo se lee: si el defecto sigue al DAC (aparece donde vaya esa salida), es
+  del generador. Si se queda en el mismo canal del ADC, es del ADC.
+  Volver al montaje A al terminar.
+
+
+--------------------------------------------------------------------------------
+M9. TABLA CONTRA ACUMULADOR (la pregunta central)                   montaje A
+--------------------------------------------------------------------------------
+  Alternar seno, tabla, seno, tabla, seno, tabla, sin tocar nada en el medio:
+
+  python grabar.py --nombre M9_seno --seg 10 --cmd SE --cmd ADC:1 --cmd DAC:1 --cmd LWAVE:0 --cmd LFREQ:1000 --cmd LAMP:63 --cmd LON --cmd ROFF
+  python grabar.py --nombre M9_tabla --seg 10 --cmd SE --cmd ADC:1 --cmd DAC:1 --cmd LWAVE:4 --cmd LAMP:63 --cmd LON --cmd ROFF
+
+  MATLAB: analizar_captura.m, canal 'l'. Anotar SFDR, peor componente,
+  THD+N y SNR (columna 400 Hz-20 kHz). En el gráfico del espectro, mirar
+  cerca de 10 kHz: con el seno por acumulador se espera un espurio de unos
+  -78 dBc en ~10,1 kHz; con la tabla, no.
+
+
+--------------------------------------------------------------------------------
+M10. (OPCIONAL) 995,4 Hz POR PASO CONTRA POR TABLA                  montaje A
+--------------------------------------------------------------------------------
+  python grabar.py --nombre M10_paso --seg 10 --cmd SE --cmd ADC:1 --cmd DAC:1 --cmd LWAVE:7 --cmd LAMP:63 --cmd LON --cmd ROFF
+  python grabar.py --nombre M10_tabla --seg 10 --cmd SE --cmd ADC:1 --cmd DAC:1 --cmd LWAVE:6 --cmd LAMP:63 --cmd LON --cmd ROFF
+
+  MATLAB: analizar_captura.m, canal 'l'. Mirar en el gráfico del espectro si
+  aparece un pico en ~47,8 kHz en "paso" y no en "tabla". Es cualitativo: a
+  esa frecuencia los filtros del codec atenúan.
+
+
+--------------------------------------------------------------------------------
+M15. (OPCIONAL) MULTITONO 60 Hz + 7 kHz                             montaje A
+--------------------------------------------------------------------------------
+  python grabar.py --nombre M15_multi --seg 10 --cmd SE --cmd ADC:1 --cmd DAC:1 --cmd LWAVE:5 --cmd LAMP:63 --cmd LON --cmd ROFF
+
+  MATLAB: solo el gráfico del espectro (los números de la tabla no valen:
+  toma los 60 Hz como fundamental). Mirar los picos a los costados de 7 kHz
+  (7000 +- 60 Hz, 7000 +- 120 Hz) y anotar cuánto están por debajo del de
+  7 kHz.
+
+
+--------------------------------------------------------------------------------
+M11. RANGO DINÁMICO (método EIAJ, señal a -60 dB)  -  LA ÚLTIMA     montaje A
+--------------------------------------------------------------------------------
+  Conviene hacerla cuando ya no esté el zumbido de red: es la que más lo sufre.
+  Son DOS comandos, en este orden (el primero deja todo listo; el segundo
+  baja el volumen del codec a -60 dB por I2C sin tocar la amplitud):
+
+  python grabar.py --nombre M11_prep --seg 1 --cmd SE --cmd ADC:1 --cmd DAC:1 --cmd LWAVE:4 --cmd LAMP:63 --cmd LON --cmd ROFF
+  python grabar.py --nombre M11_L_-60dB --seg 10 --cmd I2CW:65,135
+
+  MATLAB: analizar_captura.m, canal 'l', con el archivo M11_L_-60dB.
+  Imprime al final "RANGO DINÁMICO (EIAJ, A)".
+  Esperado: nivel de unos -57,5 dBFS. Si el nivel sale cerca de -1,5 dBFS, el
+  I2CW no llegó: repetir el segundo comando.
+  Hoja de datos: 99 dB típ., 95 dB mín. (ADC, a fs = 48 kHz).
+  Para R: lo mismo con RWAVE:4, RAMP:63, RON, LOFF y I2CW:66,135.
+
+  AL TERMINAR: desenchufar y volver a enchufar el USB. El codec queda en
+  -60 dB y el firmware no lo vuelve a escribir mientras el porcentaje no
+  cambie: reiniciar es lo más seguro.
+
+
+--------------------------------------------------------------------------------
+M12, M13, M14 (frecuencímetro y osciloscopio)
+--------------------------------------------------------------------------------
+  No se graban con el ADC. Se hacen como dice el Instructivo_de_mediciones_
+  paso_a_paso.txt (montaje D: lazo desconectado, instrumento en VOUT+ con la
+  masa en AGND).

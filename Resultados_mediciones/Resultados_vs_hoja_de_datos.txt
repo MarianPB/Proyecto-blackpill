@@ -1,0 +1,21 @@
+RESULTADOS CONTRA LA HOJA DE DATOS DEL PCM3060
+Sesion del 20/10/2026, 13:20 (capturas\sesion_20261020_1320). 1 kHz por tabla, salida simple, lazo DAC -> ADC.
+Lo medido es la cadena completa (DAC + ADC). Hoja de datos: valores a fs = 48 kHz.
+
+Parametro                     Medido L    Medido R    ADC tip / min      DAC simple tip / min   Cumple
+----------------------------  ----------  ----------  -----------------  ---------------------  ---------------------------
+THD+N (1 kHz, -1,7 dBFS)      -90,1 dB    -89,8 dB    -93 / -85 (max)    -93 / -85 (max)         Si (mejor que el maximo)
+SNR (ruido sin senal, A)       97,2 dB     96,7 dB     99 / 95            104 / 100              Si para el ADC (> 95)
+Rango dinamico (EIAJ, A)       96,8 dB     96,4 dB     99 / 95            103 / 99               Si para el ADC (> 95)
+Separacion entre canales      124,8 dB    > 128 dB     96 / 92            101 / 97               Si (muy por encima)
+THD (solo armonicos)         -100,3 dB   -106,4 dB    no especifica      no especifica          -
+SFDR                          100,4 dB     99,8 dB    no especifica      no especifica          -
+
+Como leerlo:
+- Todo cumple el minimo garantizado del ADC, que es el que limita la cadena (el ADC es la "regla").
+- THD+N: el DAC y el ADC juntos dan, con sus valores tipicos, unos -90 dB. Medimos -90: lo tipico del fabricante.
+- SNR y rango dinamico: unos 2-3 dB abajo del tipico del ADC (99) y por encima de su minimo (95).
+- Separacion: en R hacia L el cruce no llega a verse sobre el ruido, por eso "> 128".
+
+Aclaracion: la fs usada (97,66 kHz) esta un poco por encima del maximo del ADC (96 kHz), y la hoja de datos da
+los valores a 48 kHz, asi que la comparacion es aproximada.
