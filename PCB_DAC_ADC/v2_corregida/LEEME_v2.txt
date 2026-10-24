@@ -1,0 +1,65 @@
+PLACA DAC+ADC - VERSIÓN 2 (huella de la Black Pill corregida)   23/10/2026
+==========================================================================
+
+PARA QUÉ ES
+-----------
+Es la placa para hacer de cero si algún día se rehace la placa grande. La v1 (carpeta KiCad\) tiene mal
+la huella de la Black Pill y se usa con el acople (Acople_BlackPill\). Con esta v2 la Black Pill va
+directo en la placa, SIN acople, y con el MISMO firmware (Firmware_PCB).
+No se fabricó ni se probó: está verificada en KiCad (abajo).
+
+QUÉ CAMBIÓ RESPECTO DE LA V1
+----------------------------
+1. Huella corregida en la librería (5_Recursos\KiCad_libreria_AGSE\generar_footprints.py):
+   vista de arriba con el USB arriba, izquierda B12 ... B9, 5V, G, 3V3 y derecha 5V, G, 3V3, B10 ... VB,
+   igual que la WeAct V3.1. La huella vieja quedó como BlackPill_STM32F411_2x20_v1_ERRONEA (la usa la v1).
+2. La Black Pill va GIRADA 180°: USB hacia ABAJO y el conector SWD arriba. Girada, la fila izquierda queda
+   igual que en la v1, así que el teclado, MCK, el bypass, el 3,3 V y la masa de la izquierda NO cambian.
+3. La fila derecha ahora tiene, de arriba hacia abajo: 3V3, GND, ..., SDA, SCL, ..., DIN, DOUT, BCK, LRCK.
+   Se re-ruteó ese lado:
+   - VDD del codec: 3V3 de arriba -> R9 (10 ohm) -> pin 7. R9 hace de puente sobre el I2C.
+   - MCK: igual que en la v1 (sube por debajo de la Black Pill y va por arriba), baja por R1 al pin 6.
+     R1 también hace de puente sobre el I2C.
+   - I2C al codec (pines 1 y 2): en la Black Pill SDA queda arriba de SCL y en el codec al revés, así que
+     SCL cruza por arriba de SDA con un PUENTE DE ALAMBRE al lado de la Black Pill.
+   - I2C a la pantalla y los pull-ups (abajo, como en la v1): bajan por debajo de la Black Pill y se cruzan
+     con OTRO PUENTE DE ALAMBRE (debajo de la Black Pill: soldarlo antes de poner las tiras).
+   - I2S: BCK y LRCK suben por R2 y R3 por encima de DIN y DOUT y entran a los pines 10 y 11 (unidos a 5 y 4
+     por los puentes internos de siempre); DIN va derecho por R4 al pin 12; DOUT pasa por debajo del codec,
+     sube por adentro y entra al pin 3 (TP1 de DOUT quedó sobre esa pista, abajo).
+   - Masa del bloque del codec (pin 8, C5, C6, TP2): puente de alambre por encima de las 4 pistas del I2S.
+4. Componentes que se movieron: R1, R2, R3, R4, R9 y TP1. El resto (codec, analógico, fuentes, teclado,
+   pantalla, conectores) está en el mismo lugar que en la v1.
+5. Agujeros de fijación con pad de 5,8 mm (como quedó la v1).
+6. Todas las masas con alivio térmico (anillo y rayos): en la v1 las del codec, los selectores, J_IN, J_OUT,
+   J_BYPASS y JP_GND iban sólidas al plano y en el planchado no se veía el pad. Ahora se ven todas y se
+   sueldan más fácil (el plano no se lleva tanto calor). Tres quedan con un solo rayo de 0,8 mm porque los
+   pines vecinos tapan los otros lados (J_BYPASS GND, una masa de SEL2 y una de J_IN): para masa alcanza.
+
+PUENTES DE ALAMBRE (lado de componentes): 4 en total (la v1 tenía 2)
+  - SCL al codec: vertical de 11,6 mm al lado de la Black Pill.
+  - SCL a la pantalla: horizontal de 5 mm debajo de la Black Pill.
+  - DGND del codec: vertical de 15,5 mm por encima del I2S (entre R4 y las diagonales).
+  - DGND izquierdo: el mismo de la v1 (al lado del zener D2).
+
+VERIFICADO
+----------
+- DRC: 0 errores, 0 conexiones pendientes, esquemático y placa coinciden.
+- ERC: 0 errores (1 aviso, el mismo de la v1: el pin MS/ADR del codec atado a AGND).
+- Los 21 pines usados de la Black Pill (y los dos 5V, sin conectar), comparados uno por uno con el pinout
+  real girado 180°: todos bien.
+- Los scripts reproducen exactamente la v1 (mismas 158 pistas y huellas) antes de los cambios.
+
+FABRICACIÓN (igual que la v1)
+-----------------------------
+Planchado\1_cobre_para_planchar.pdf, 2_guia_de_armado.pdf,
+3_serigrafia_espejada_opcional.pdf. Control: "AGSE DAC+ADC v2 FI-UNLP 2026" se ve al revés en el papel.
+Mechas: 0,8 mm x 54; 1,0 mm x 118; 1,1 mm x 4 (zeners); 0,9 mm x 8 (vías de los 4 puentes, se pueden hacer
+de 1,0); 3,2 mm x 4.
+Lista de componentes: la misma que la v1.
+
+ARCHIVOS
+--------
+KiCad\ es el proyecto (esquemático y placa). Se generó con scripts (circuito.py, generar_pcb.py,
+ruteo_manual.py) que quedan en el proyecto local; si se retoca a mano en KiCad, se trabaja directo sobre esto.
+La documentación de 15 páginas (v1_fabricada) describe la v1.

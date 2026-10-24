@@ -1,0 +1,4 @@
+(fp_lib_table
+  (version 7)
+  (lib (name "AGSE_PCB")(type "KiCad")(uri "${KIPRJMOD}/AGSE_PCB.pretty")(options "")(descr "Huellas de esta placa"))
+)

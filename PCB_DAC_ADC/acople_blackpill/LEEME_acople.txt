@@ -1,0 +1,69 @@
+ACOPLE BLACK PILL  (22/10/2026)
+================================
+
+POR QUÉ HACE FALTA
+------------------
+La huella de la Black Pill de la placa DAC+ADC está mal (comparada con el pinout de la WeAct V3.1):
+
+  Vista de arriba, USB arriba        columna izquierda (arriba -> abajo)         columna derecha (arriba -> abajo)
+  Huella de nuestra placa            VB C13 C14 C15 R A0..A7 B0 B1 B2 B10 3V3 G 5V   B12 B13 B14 B15 A8..A15 B3..B9 5V G 3V3
+  Black Pill real                    B12 B13 B14 B15 A8..A15 B3..B9 5V G 3V3      5V G 3V3 B10 B2 B1 B0 A7..A0 R C15 C14 C13 VB
+
+Si la Black Pill se gira 180° (USB abajo), la columna izquierda coincide fila por fila y la derecha
+queda al revés. NO enchufarla directo en la placa en ninguna posición: girada, el 5V de la Black Pill
+cae en DOUT del codec, BCK en DGND y el VDD del codec quedaría alimentado por un pin del micro.
+
+QUÉ HACE EL ACOPLE
+------------------
+Abajo tiene tiras MACHO que entran en los zócalos de la Black Pill de la placa principal. Arriba tiene
+dos tiras HEMBRA donde va la Black Pill GIRADA 180° (USB hacia abajo) y corrida 7,62 mm a la derecha.
+No puede ir justo encima: en cada agujero entra un solo pin, y en esas posiciones tendrían que convivir
+un pin hacia abajo y uno hacia arriba con señales distintas.
+
+  Columna (de izquierda a derecha, vista de arriba)   Tira               Qué conecta
+  J1  x = 48,38 mm  "M"                                macho 1x20         columna izquierda de la placa
+  J2  x = 56,00 mm  "H"                                hembra 1x20        columna izquierda de la Black Pill girada
+  J3  x = 63,62 mm  "M"                                macho 4 + 7        columna derecha de la placa (filas 1-4 y 14-20)
+  J4  x = 71,24 mm  "H"                                hembra 1x20        columna derecha de la Black Pill girada
+
+Conexiones (19 redes, verificadas contra el pinout real y la placa principal):
+  - J1 -> J2, misma fila (pistas rectas): A0 A1 A2 (teclado), A3 (MCK), A4..A7, B0 (teclado), B1 y B10
+    (bypass), 3V3 y GND.
+  - I2S, dando la vuelta por arriba: B12 -> LRCK, B13 -> BCK, B14 -> DOUT, B15 -> DIN.
+  - I2C, cruzando por el medio: B6 -> SCL, B7 -> SDA.
+  - 3,3 V de la Black Pill -> pin 3V3 derecho de la placa (el que alimenta el VDD del codec por R9).
+  - El GND derecho de la placa no se conecta: ya está unido por el plano DGND de la placa principal.
+El firmware NO cambia (Firmware_PCB) y la placa principal NO se toca.
+
+FABRICACIÓN (igual que la placa principal)
+------------------------------------------
+Planchado\1_cobre_para_planchar.pdf ... hoja A4 apaisada, como la de la placa
+Planchado\2_guia_de_armado.pdf ........ vista de arriba con pistas (azul) y serigrafía
+Placa de 33,2 x 59,5 mm, una sola capa (cobre abajo), sin puentes.
+Imprimir a TAMAÑO REAL (100 %). Control: el texto "ACOPLE BP" tiene que verse AL REVÉS en el papel.
+Agujeros: 71 de 1,0 mm.
+
+ARMADO
+------
+1. Tiras hembra J2 y J4 (1x20) del lado de arriba (sin cobre), soldadas abajo. Cortar las patas que
+   sobran: quedan encima de R3 y R4 de la placa principal.
+2. Tiras macho J1 (1x20) y J3 (un pedazo de 4 arriba y uno de 7 abajo): el plástico ARRIBA y la parte
+   larga de los pines hacia ABAJO, atravesando la placa; se sueldan abajo. Soldar primero un pin de cada
+   punta, probar que entra derecho en los zócalos de la placa principal y recién después soldar el resto.
+   J3 no lleva pines en las filas 5 a 13: por ahí pasan las pistas del I2C.
+3. Antes de enchufar nada, con el téster en continuidad y el acople suelto:
+   - ninguna pista en corto con la vecina (sobre todo las 4 del I2S, que van juntas);
+   - J1 fila 18 (3V3) con J3 fila 20, y J1 fila 19 (GND) sin continuidad con 3V3.
+4. Enchufar el acople en la placa principal (J1 a la izquierda, sobre la columna izquierda de la Black
+   Pill). Después enchufar la Black Pill en J2/J4 con el USB hacia ABAJO (lado "USB" de la serigrafía).
+5. Revisar que el cable USB no choque con el conector de J_3V3 o con la pantalla: el USB queda a unos
+   2 cm de altura, apuntando hacia el borde de abajo de la placa.
+
+ARCHIVOS
+--------
+KiCad\  proyecto de KiCad (sin esquemático). Las coordenadas son las de la placa v1, así el acople queda
+        alineado. Se generó con un script (generar_acople.py) que queda en el proyecto local.
+DRC: 0 errores, 0 conexiones pendientes.
+
+Si se rehace la placa principal: la huella ya está corregida y hay una placa v2 que no necesita el acople
+(23/10/2026, v2_corregida).

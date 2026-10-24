@@ -1,0 +1,393 @@
+PCB DAC + ADC (AGSE) - GUIA DE DISEÑO (versión 4, 15/10/2026: medidas confirmadas y proyecto de KiCad)
+================================================================
+
+Objetivo: una placa de UNA capa, fabricación local, que reemplace a la perforada y baje el ruido
+(en la perforada: piso del ADC -75,8 dBFS y cadena -54,4 dBFS, con pico en 381,5 Hz = fs/256, la
+cadencia del DMA y del USB). Va todo enchufado en tiras de pines: Black Pill, adaptador del PCM3060,
+pantalla y teclado. Las entradas y salidas de audio, por ahora, también en pines.
+Además: selector de la entrada del ADC (masa, DAC L, DAC R o conector), selección de
+alimentación (USB o fuente de laboratorio) y puntos de prueba.
+
+Croquis de concepto: croquis\croquis_v3.png (lo genera croquis\croquis_ubicacion.py).
+Proyecto de KiCad (esquemático y placa con los componentes ya ubicados): KiCad\PCB_AGSE.kicad_pro (ver 11).
+Base teórica: "7_Interferencia Electromagnética y PCB" (Spinelli) + hoja de datos del PCM3060.
+
+
+1. LA IDEA EN UNA FRASE
+------------------------
+Dos mundos separados (digital a la izquierda, analógico a la derecha), cada uno con su alimentación
+y su plano de masa, que se tocan en UN solo punto, debajo del codec. El codec hace de frontera:
+sus pines 1 a 14 son todos digitales y los 15 a 28 todos analógicos.
+
+
+2. QUÉ VIENE DEL APUNTE Y CÓMO SE APLICA ACÁ
+---------------------------------------------
+a) Impedancia compartida (filminas 32-42). La corriente digital (micro, USB, cada 2,6 ms) que vuelve
+   por un tramo de masa que también usa el codec genera una tensión vG = iG·ZG que se suma a la
+   señal. Es casi seguro nuestro 381 Hz.
+   -> Masa analógica y digital separadas, unidas en un único punto (filminas 38-42, "tope de gama"):
+      AVCC = 5 V y DVCC = 3,3 V, cada uno con su desacople que retorna a SU masa.
+   -> Plano de masa en vez de pistas finas: baja ZG (filminas 46, 56, 71).
+
+b) ¿Raja sí o raja no? (filmina 44). Con un solo CI mixto (el codec) y una sola capa, sí conviene
+   separar los dos planos con una raja y unirlos en un solo punto debajo del codec. Ninguna pista
+   de señal cruza la raja (si cruza, su corriente de retorno da la vuelta y forma un lazo grande).
+   Con las fuentes externas (ver 3) NINGUNA pista cruza la raja: el 5 V entra del lado analógico y
+   el RST va al 5 V analógico. La única unión es JP_GND.
+
+c) Campo magnético (filminas 52-57, 62). Lazos chicos: cada pista con su retorno al lado. En una
+   capa no hay plano debajo de la pista, así que el cobre de masa tiene que rodear las pistas
+   (relleno en todo el espacio libre) y las pistas de señal tienen que ser cortas.
+   Las salidas diferenciales L+ y L- van juntas y paralelas (y R+ con R-).
+
+d) Campo eléctrico (filminas 21-31). Los relojes (MCK = 25 MHz, BCK = 6,25 MHz) son los agresores.
+   Lejos de las entradas del ADC, que son las víctimas. 33 ohm en serie con MCK, BCK, LRCK y DIN,
+   pegadas al pin del micro: suavizan los flancos y bajan lo que irradian.
+
+e) Desacoples (filminas 72-77). Un electrolítico de 10 uF sirve hasta unos 500 kHz; un cerámico de
+   100 nF hasta unos 16 MHz. Van los dos en paralelo, el de 100 nF lo más pegado posible al pin.
+
+f) Recomendaciones para PCB artesanal (filmina 70):
+   - Pads de 90 mils (2,3 mm) o más; pistas de 30 mils (0,76 mm) o más; separación 20 mils (0,5 mm).
+     Alimentación: 50 mils (1,27 mm) o más.
+   - Pines de prueba y de masa (ver 6).
+   - Agujeros M3 en las esquinas.
+   - Texto en el lado de soldadura, en espejo.
+   - Protección de entradas de alimentación (ver 3).
+   - Pasivar lo que no se usa.
+
+
+3. ALIMENTACIÓN (dos fuentes de laboratorio; el USB solo para datos)
+----------------------------------------------------------------------
+Cambio del 15/10: ya no hay selectores USB/EXT. El 5 V y el 3,3 V vienen cada uno de una fuente
+estable, y el USB-C de la Black Pill queda solo para los datos con la PC.
+
+J_5V (borde de abajo, zona analógica) -> VCC del codec (5V_A, pin 24):
+   Fuente de 5,0 a 5,2 V, limitada a 100 mA. Masa de la fuente -> AGND.
+   Zener 1N4734A (5,6 V) de protección y filtro RC: 4,7 ohm -> 470 uF -> 2,2 ohm -> 470 uF, y
+   pegados al pin 24: 10 uF + 100 nF. El codec consume 25 mA típico (36 mA máx.): caen 0,25 V como
+   mucho (mínimo del codec: 4,5 V). Atenuación a 381 Hz: unos 23 dB. Una ferrita no sirve para
+   esto: recién filtra arriba de 1 MHz.
+   La pista del 5V_A llega al pin 24 por DEBAJO del adaptador (entre las dos filas, del lado
+   analógico de la raja), ancha (1,27 mm o más), como recomendó el profe.
+
+J_3V3 (borde de abajo, zona digital) -> todo lo digital:
+   Fuente de 3,3 V, limitada a 200 mA. Masa de la fuente -> DGND.
+   Zener 1N4729A (3,6 V) de protección. De ahí sale:
+   - el pin 3V3 de la Black Pill (el micro se alimenta por acá, no por el USB);
+   - la pantalla y los pull-ups del I2C;
+   - por 10 ohm + 10 uF + 100 nF, el VDD del codec (3V3_C, pin 7). Esa pista también entra por
+     debajo del adaptador, del lado digital de la raja.
+
+RST (pin 15): la hoja de datos dice que es una entrada Schmitt con pull-down interna de 50 kohm que
+   TOLERA 5 V (p. 3, nota 3; alto mínimo 2 V, máximo 5,5 V). Por eso no hace falta un divisor a
+   3,3 V: va al 5V_A con 10 kohm (R14), queda del lado analógico y no cruza la raja.
+
+USB SOLO DATOS: los pines 5V de la Black Pill NO se conectan en esta placa. Pero ojo: con un cable
+   USB común, el VBUS de la PC igual llega a la Black Pill por dentro del módulo y su regulador
+   también pone 3,3 V, en paralelo con la fuente. Para que el micro se alimente SOLO de la fuente,
+   usar un cable o adaptador USB "solo datos" (sin VBUS). Si no se consigue, funciona igual, pero
+   el 3,3 V ya no es solo el de la fuente.
+   Orden de encendido: primero la fuente de 3,3 V (y la de 5 V), después el USB.
+
+Protección: si una fuente se conecta al revés, su zener conduce en directa; si se pone una tensión
+de más, conduce en inversa. En los dos casos la fuente entra en limitación de corriente y no se
+rompe nada. POR ESO la limitación de corriente de las fuentes es obligatoria.
+
+MASAS DE LAS FUENTES: la de J_5V va a AGND y la de J_3V3 a DGND. Tienen que ser canales AISLADOS
+(una fuente doble con salidas independientes, o dos fuentes). Si comparten la masa, se forma una
+segunda unión AGND-DGND por afuera de la placa y se arruina la unión única. Lo mismo con la masa
+del USB (la PC): llega a DGND por la Black Pill, así que la fuente de 5 V no tiene que estar
+referida a tierra por otro lado.
+
+VCOM (pin 21): 10 uF + 100 nF a AGND, pegados; no se conecta a nada más.
+
+
+4. MASAS
+--------
+DGND: plano en toda la zona digital: GND de la Black Pill, DGND del codec (8), pantalla, teclado,
+      desacoples de 3V3_C, masa de J_3V3.
+AGND: plano en toda la zona analógica: AGND1 y AGND2 (22, 23), SGND (16), MODE (28), MS/ADR (27),
+      desacoples de 5V_A y VCOM, masas de J_IN y J_OUT, resistencias de 100 kohm de las entradas,
+      columna MASA de los selectores, masa de J_5V.
+UNIÓN: JP_GND (2 pines), debajo del adaptador: pin 8 (DGND) con pines 22/23 (AGND). Siempre puesto.
+       Sacarlo solo para probar otra unión, y nunca dejando AGND sin ninguna conexión.
+
+
+5. SELECTOR DE ENTRADA DEL ADC (uno por canal: SEL_ADC_L y SEL_ADC_R)
+------------------------------------------------------------------------
+Tira de pines de 2 x 4 y UN SOLO puente por canal, puesto en vertical en una columna.
+En la placa (16/10) los dos selectores van uno arriba del otro, con las filas de fuentes
+enfrentadas, y las columnas quedaron en este orden (rotulado en la serigrafía):
+
+                  DAC L    DAC R    EXT      MASA
+     SEL_ADC_R :  o        o        o        o     <- entrada del ADC R (los 4 unidos)
+                  o        o        o        o     <- fuentes
+     SEL_ADC_L :  o        o        o        o     <- fuentes
+                  o        o        o        o     <- entrada del ADC L (los 4 unidos)
+
+   (Así una sola línea vertical lleva cada DAC a los dos selectores, y los pines de MASA quedan del
+   lado de afuera, tocando el plano AGND.)
+
+   MASA  : la entrada del ADC a AGND -> piso de ruido del ADC solo (M2).
+   DAC L : lazo con la salida VOUTL+ del DAC (en SEL_ADC_L es el lazo directo, en SEL_ADC_R el
+           cruzado).
+   DAC R : lazo con VOUTR+ (en SEL_ADC_R directo, en SEL_ADC_L cruzado).
+   EXT   : lo que entra por el conector J_IN (un generador, el equipo de otro grupo, etc.).
+   Sin puente: la entrada queda en masa a través de la resistencia de 100 kohm (no queda al aire).
+
+Detalles:
+   - El selector está ANTES del capacitor de 4,7 uF: el pin del codec está en VCC/2 y no se toca.
+   - Las salidas del DAC llegan SIEMPRE a J_OUT (directo, sin jumpers), así se pueden medir o
+     llevar a otro equipo en cualquier momento.
+   - Hacia el selector, cada salida (VOUTL+ y VOUTR+) pasa por una resistencia: 470 ohm la L (R12)
+     y 240 + 240 ohm en serie la R (R15 y R13; son dos porque en la placa cada una hace de puente
+     sobre un cruce). Es una protección: si por error se ponen dos puentes en el mismo canal
+     (MASA y DAC), la salida del DAC queda cargada con 470/480 ohm en vez de en corto.
+     Contra la entrada del ADC (10 kohm) baja el nivel 0,4 dB, que es fijo y se absorbe en la
+     referencia de la sesión (M4).
+   - NUNCA una salida del DAC directo a masa: está en 2,5 V de continua y la hoja de datos pide una
+     carga de 5 kohm o más.
+   - Con un DAC elegido no hace falta desenchufar nada de J_IN: el conector queda suelto.
+
+Configuración por medición:
+   Uso normal / señal de afuera ... los dos selectores en EXT.
+   M2 piso de ruido del ADC ....... los dos en MASA.
+   M3 cadena (DAC en silencio) .... SEL_ADC_L en DAC L, SEL_ADC_R en DAC R.
+   M4, M5, M7 y M8 ................ igual que M3, con la señal de prueba.
+   M6 canales cruzados ............ SEL_ADC_L en DAC R y SEL_ADC_R en DAC L (sin cables).
+   Mezclas: por ejemplo L en MASA y R en DAC R, para ver cuánto del canal R se filtra al L.
+   Con las fuentes de laboratorio el 5V del USB ya no entra al codec: si el pico de 381 Hz baja
+   respecto de la perforada, la causa era el 5V del USB.
+
+
+6. PUNTOS DE PRUEBA (pines o lazos para la punta del osciloscopio)
+-------------------------------------------------------------------
+(Cambio del 15/10: en la primera versión había 16 puntos de prueba sueltos y alargaban mucho las
+pistas. Ahora se mide en las patas y pines que ya están en la placa, y quedan solo tres lazos.)
+Lazos propios: TP1 = DOUT, TP2 = DGND (cocodrilo, zona digital), TP3 = AGND (cocodrilo, zona
+analógica).
+Dónde medir el resto:
+   MCK, BCK, LRCK, DIN ... pata de R1, R2, R3, R4 del lado del codec (la otra pata es el micro).
+   SCL, SDA ............. pines de J_OLED.
+   5V_IN, 3V3_IN ........ pines de J_5V y J_3V3.  5V_A ...... pata de C4 (pegado al pin 24).
+   3V3_C ................ pata de C6.             VCOM ...... pata de C8.
+   ADC_L, ADC_R ......... fila de arriba de cada selector (cualquier pin).
+   Salidas del DAC ...... J_OUT.
+Para ver el rizado de 381 Hz: punta en C4, cocodrilo en TP3 (AGND), acople en alterna.
+
+
+7. UBICACIÓN (ver croquis)
+---------------------------
+- Black Pill a la izquierda, PARADA, con el USB-C cerca del borde de arriba (cambio del 15/10: acostada no
+  dejaba lugar para sacar las pistas). Cada fila sale de costado: la izquierda al teclado, la derecha
+  al codec. El SWD queda abajo.
+- Codec en el medio-derecha, parado: pines 1-14 mirando a la Black Pill, 15-28 al borde derecho.
+  La raja entre planos pasa entre las dos filas del adaptador.
+- Resistencias serie del I2S entre la Black Pill y el codec. El 10 ohm (R9) entre la Black Pill
+  y el codec; los desacoples de 3V3_C pegados a los pines 7 y 8.
+- Las dos fuentes entran por el borde de abajo: J_3V3 (con su zener) abajo a la izquierda y J_5V
+  (con su zener y el filtro de 5V_A) abajo a la derecha. C3 y C4 pegados al pin 24.
+- Conectores para acoplar otra etapa en los bordes: J_IN y J_OUT a la derecha (con rótulos L, GND,
+  R... en la serigrafía), J_5V y J_3V3 abajo, teclado a la izquierda, pantalla abajo.
+- Selectores SEL_ADC_L y SEL_ADC_R entre el codec y J_IN, cerca de los pines VINL/VINR (las
+  entradas son las pistas más sensibles: cortas). J_OUT en el borde derecho, directo desde el codec.
+- J_OLED y J_TECLADO del lado digital.
+
+
+8. PISTAS
+---------
+- I2S (MCK, BCK, LRCK, DIN, DOUT): cortas, siempre sobre la zona digital.
+- Puentes en la placa (son del cableado actual): SCKI1=SCKI2, BCK1=BCK2, LRCK1=LRCK2.
+- Una capa: donde se cruzan dos pistas, un puente de alambre del lado de los componentes.
+  Mejor un puente en una pista digital que dar la vuelta con una analógica.
+- Ángulos de 45°, nada de 90°.
+- Relleno de masa en todo el espacio libre de cada mitad, con separación de 0,5 mm.
+
+
+9. LISTA PRELIMINAR DE COMPONENTES (agujero pasante)
+-----------------------------------------------------
+Módulos: Black Pill (2 tiras hembra de 20), adaptador PCM3060 (2 tiras hembra de 14).
+Conectores (tira macho 2,54 mm): J_IN 1x4, J_OUT 1x6, J_BYPASS 1x3, J_OLED 1x4, J_TECLADO 1x8, J_5V 1x2, J_3V3 1x2.
+Selectores: tira macho 2x4 x2 (SEL_ADC_L, SEL_ADC_R).
+Jumpers: 1x2 x1 (JP_GND), y puentecitos (unos 4).
+Puntos de prueba: 3 lazos de alambre (DOUT, DGND, AGND).
+Resistencias 1/4 W: 10 kohm x1 (RST), 470 ohm x3 (R12 y las del bypass R16/R17), 240 ohm x2, 33 ohm x4, 4,7 kohm x2, 4,7 ohm x1, 2,2 ohm x1, 10 ohm x1, 100 kohm x2.
+Capacitores: 470 uF/10 V x2, 10 uF/16 V x3, 100 nF cerámico x3, 4,7 uF/16 V electrolítico x2
+   (entradas; el + hacia el codec, que está en VCC/2).
+Zeners 1 W: 5,6 V (1N4734A) x1, 3,6 V (1N4729A) x1.
+
+
+10. MEDIDAS CONFIRMADAS (calibre, 15/10/2026; fotos en medidas\)
+-------------------------------------------------------------------
+- Adaptador del codec: 28 pines (14 + 14), paso 100 mils, filas a 600 mils (15,24 mm), placa del
+  adaptador de 20,17 x 38,72 mm. Las pistas del adaptador van sin cruces, así que pin n del
+  adaptador = pin n del PCM3060, con numeración DIP (1 a 14 de un lado, 15 a 28 volviendo por el
+  otro). ANTES DE SOLDAR: marcar el pin 1 del adaptador (con el multímetro, continuidad entre el
+  pin 1 del chip, el del punto, y el pad), porque la placa no tiene ninguna marca.
+- Black Pill: filas a 600 mils (15,24 mm). Nuestra librería decía 17,78 mm y tenía los pines 1 a 20
+  numerados al revés: ya está corregida (la versión vieja quedó en _REVISAR_antes_de_borrar).
+  En la nota dice "30 pines (15-15)", pero la Black Pill tiene 20 por lado (B12 ... 3V3 y
+  VB ... 5V, se leen en la foto): la placa lleva dos tiras hembra de 20.
+  El conector SWD sale por la punta opuesta al USB: ahí no va ningún componente alto (zona
+  "SWD libre"), así se puede enchufar el ST-Link con todo montado.
+- Pantalla: tira de 4, mirándola de frente GND, VDD, SCK, SDA.
+- Teclado: tira de 8, filas 1 a 4 y columnas 1 a 4 (si el orden real resulta otro, se corrige en
+  el firmware o dando vuelta la tira).
+- Tamaño final: 150 x 83 mm (se corta de una placa virgen de 10 x 15 cm; primero fue 125 x 90, sin
+  lugar para rutear, después 150 x 100, y ya ruteada se achicó sacando dos franjas vacías).
+  Fabricación: planchado de tóner (ver sección 13); el diseño sigue las reglas de PCB artesanal
+  del apunte (pads grandes, pistas anchas, una sola capa).
+
+
+11. PROYECTO DE KICAD (carpeta KiCad\)
+---------------------------------------
+Abrir KiCad\PCB_AGSE.kicad_pro con KiCad 10.
+- PCB_AGSE.kicad_sch: esquemático en una hoja A3, por bloques (módulos, I2S, I2C, alimentación,
+  entradas, salidas, puntos de prueba), cada uno con su explicación. Las conexiones van por
+  etiquetas: dos pines con la misma etiqueta están unidos. También está en esquematico_PCB_AGSE.pdf.
+- PCB_AGSE.kicad_pcb: placa de 150 x 83 mm, ruteada (sección 12), con los dos planos de masa
+  (DGND a la izquierda, AGND a la derecha, raja de 1 mm en x = 86 mm), los agujeros M3 y los
+  rótulos. Vistas: ruteo_por_pasos\paso5_placa_achicada_150x83.png y render_3d_arriba.png.
+- Chequeos al día de hoy: ERC 0 errores (una advertencia sin importancia: MS/ADR, que es
+  bidireccional, va a AGND); DRC 0 violaciones; esquemático y placa coinciden. Lo único pendiente
+  son las 87 conexiones sin rutear.
+- Reglas ya cargadas: separación 0,5 mm; pistas de señal 0,8 mm; alimentación y masas 1,27 mm
+  (clase "Potencia", DRC da error por debajo de 1 mm); pads de 2,0 a 2,3 mm, ovalados a 2,8 mm
+  donde entra (librería AGSE_PCB.pretty, propia de esta placa).
+- Una sola capa: el cobre va en B.Cu (abajo). Si un cruce no tiene salida, se dibuja un tramo
+  recto en F.Cu entre dos vías (2,2 mm / 0,9 mm): cada tramo en F.Cu es un PUENTE DE ALAMBRE que
+  se suelda del lado de los componentes. Que sean pocos y en pistas digitales o de continua.
+- Prueba de autoruteo (borrador_autoruteo\): con Freerouting, solo capa de abajo, quedan 12 conexiones
+  sin salida; pasándolas por arriba salen 15 cables, varios de 50-60 mm, y el autoruteador hace cosas
+  malas para audio (una pista de 5V que rodea toda la zona analógica, salidas del DAC con cables
+  largos, planos de masa cortados). Sirve para saber que se puede, no como placa final.
+- Los scripts generar_esquematico.py y generar_pcb.py (con circuito.py) arman todo desde cero.
+  Sirven para cambiar algo del circuito ANTES de rutear. Una vez que se empieza a rutear, NO
+  volver a correr generar_pcb.py (pisa la placa); los cambios se hacen en KiCad a mano.
+
+Orden sugerido para rutear:
+   1. I2S (MCK, BCK, LRCK, DIN) y DOUT: cortos, siempre sobre DGND, lejos de la raja.
+   2. Puentes del codec: SCKI1-SCKI2 (6-9), BCK1-BCK2 (5-10), LRCK1-LRCK2 (4-11).
+   3. Alimentación: J_5V -> filtro -> por debajo del adaptador al pin 24; J_3V3 -> Black Pill,
+      pantalla, pull-ups y, por R9, por debajo del adaptador al pin 7. Pistas de 1,27 mm o más.
+   4. Entradas: VINL/VINR -> capacitores -> selectores -> J_IN. Las más sensibles: cortas.
+   5. Salidas: L+ con L- juntas y paralelas (R+ con R- igual) hasta J_OUT; las ramas de 470 ohm.
+   6. I2C, pantalla, teclado y puntos de prueba.
+   7. Rellenar zonas (tecla B) y correr el DRC. Revisar que cada pad de masa tenga al menos dos
+      rayos del alivio térmico y que no quede ninguna isla de cobre suelta.
+
+
+12. RUTEO TERMINADO (16/10/2026)
+--------------------------------
+Estado: placa ruteada entera, en una sola capa. DRC 0 errores, 0 conexiones pendientes,
+esquemático y placa coinciden, ERC sin errores. 150 pistas (1,5 m de cobre) y SOLO 2 puentes de
+alambre, los dos de masa digital (cortos: 9 y 6 mm).
+Imágenes: KiCad\ruteo_por_pasos\paso5_placa_achicada_150x83.png (la placa final; las de 150 x 100
+quedaron en anteriores_150x100) y KiCad\render_3d_arriba.png / render_3d_abajo.png.
+
+Asignación de pines nueva (firmware en 7_PCB_DAC_ADC\Firmware_PCB, compila sin errores):
+   BCK en PB13 (antes PB10), así LRCK, BCK, DOUT y DIN salen juntos de la fila derecha.
+   Teclado entero en la fila izquierda: filas PA0, PA1, PA2, PA4; columnas PA5, PA6, PA7, PB0.
+   MCK sigue en PA3 (no hay otra opción en la Black Pill).
+   OJO: no cargar ese firmware en la placa perforada sin recablear.
+
+Cómo quedó:
+   - Alimentación: 5V por abajo a la derecha, filtro en línea y tronco que sube por debajo del
+     adaptador hasta el pin 24 (R14, el pull-up del RST, sale de ese tronco). 3,3 V por abajo a la izquierda, bus por el borde de abajo hasta la Black Pill
+     (pin 3V3 izquierdo), la pantalla y los pull-ups. El VDD del codec sale del pin 3V3 derecho de la
+     Black Pill (red 3V3_BP, unida por dentro del módulo) por R9 al pin 7; C6 parado sobre esa pista,
+     con su otra pata directo al pin 8.
+   - Relojes: las líneas salen derechas del codec hacia la Black Pill. R3 y R2 (paradas) hacen de
+     puente para que DOUT quede arriba; MCK sube por debajo de la Black Pill, va por arriba y baja por
+     R1 (parada) al pin 6; DIN baja por R4 y entra al pin 12 pasando por debajo de R9. Los puentes
+     internos del codec (4-11, 5-10, 6-9) van entre las filas del adaptador.
+   - Bloque de DGND al lado del codec (pines 8 a 11 libres por afuera), unido al resto de la masa
+     digital por un puente corto pegado a JP_GND.
+   - I2C: baja por debajo de la Black Pill, pasa por la pantalla (abajo, J_OLED) y los pull-ups y
+     entra al codec por adentro, desde abajo, hasta los pines 1 y 2.
+   - Teclado: 8 líneas casi rectas a la tira del borde izquierdo.
+   - Analógico: entradas -> 4,7 uF -> selectores (R arriba, L abajo), salidas en paralelo a J_OUT,
+     VCOM y VCC con sus capacitores pegados a los pines. Ninguna pista cruza la raja; la única unión
+     DGND-AGND es JP_GND.
+   - Conectores: J_IN = R, GND, L, GND. J_OUT = GND, L+, L-, R+, R-, GND (masa en las dos puntas).
+   - Pads de masa del codec, de los selectores y de J_IN/J_OUT con conexión sólida al plano.
+
+Si se cambia algo del circuito: editar circuito.py y ruteo_manual.py (las pistas están escritas
+por bloques, con coordenadas) y volver a correr generar_esquematico.py, generar_pcb.py y
+ruteo_manual.py, en ese orden. Si se retoca a mano en KiCad, ya no correr los scripts (pisan la placa).
+
+Achicada (16/10, a pedido): de 150 x 100 a 150 x 83 mm sin tocar el ruteo. El filtro de 5 V (J_5V,
+D1, R7, R8, C1, C2) pasó del borde de arriba al de abajo, al lado de J_3V3, y R14 se corrió al
+costado del tronco. Con eso quedaron dos franjas vacías de lado a lado (arriba, y debajo de la Black
+Pill) que solo cruzaban pistas verticales: se sacaron corriendo todo hacia arriba 8,5 mm cada vez.
+DRC 0, sin conexiones pendientes, esquemático y placa iguales.
+Serigrafía reacomodada (16/10): los nombres se pisaban entre sí. Ahora los ubica KiCad\serigrafia.py
+(lo llama generar_pcb.py): prueba lugares alrededor de cada componente, o adentro del cuerpo en
+resistencias y diodos, y elige uno que no pise pads, contornos, puentes ni otros textos. Los rótulos
+de J_OUT quedaron parados, entre los pines y el borde (a la izquierda está R15). Solo cambian textos:
+el cobre es el mismo.
+Corrección: los rótulos +5V / AGND de J_5V estaban al revés en la serigrafía (el pin 1, +5V, es el de
+la derecha). Ahora cada rótulo se ubica según la posición real de su pin.
+
+
+13. FABRICACIÓN POR PLANCHADO DE TÓNER (carpeta Fabricacion_planchado\)
+-------------------------------------------------------------------------
+Archivos (A4 apaisada, escala 1:1):
+   1_cobre_para_planchar.pdf ........ cobre (B.Cu) en negro + contorno. SIN espejar: así como sale.
+                                      Control: el texto "AGSE DAC+ADC FI-UNLP 2026" tiene que verse
+                                      AL REVÉS en el papel (queda derecho en el cobre).
+   2_guia_de_armado.pdf .............. vista desde arriba con serigrafía, cobre y los 2 puentes de
+                                      alambre (en rojo), para ubicar cada componente.
+   3_serigrafia_espejada_opcional.pdf  rótulos del lado de componentes, ya espejados, por si se
+                                      quieren planchar también (no hace falta).
+Imprimir:
+   - Impresora LÁSER (la de chorro de tinta no sirve), en papel ilustración/satinado.
+   - "Tamaño real" / escala 100 %, sin "ajustar a la página". Medir con regla: el contorno tiene que
+     dar 150 mm x 83 mm. Si da distinto, no planchar.
+   - Tóner al máximo (sin modo ahorro).
+Agujeros (los pads tienen un puntito en el centro para guiar la mecha):
+   - 0,8 mm: 50 (resistencias y capacitores).
+   - 1,0 mm: 123 (tiras de pines, Black Pill, adaptador del codec, puntos de prueba, zeners y las
+     4 vías de los puentes de alambre).
+   - 3,2 mm: 4 (agujeros de fijación M3 de las esquinas). Desde el 22/10 tienen un pad de cobre
+     de 5,8 mm sin red (queda marcado en el planchado y centra la mecha); a 0,55 mm del borde.
+Después del ataque:
+   - Revisar con el tester que no haya cortos entre pistas vecinas, sobre todo entre los pines del
+     adaptador y de la Black Pill, y entre DGND y AGND con JP_GND sacado (tiene que dar abierto).
+   - Soldar primero los 2 puentes de alambre de DGND (lado de componentes), después lo más bajo
+     (resistencias, zeners) y al final tiras de pines y electrolíticos.
+   - Marcar el pin 1 del adaptador del codec antes de enchufarlo.
+
+
+14. DOCUMENTACIÓN (carpeta Documentacion\)
+-------------------------------------------
+Documentacion_placa_DAC_ADC.pdf: croquis del circuito final dibujado donde quedó cada cosa en la
+placa (completo y por zonas), la PCB de arriba y de abajo, y la lista detallada de componentes con
+el resumen para comprar. Si cambia la placa: correr KiCad\exportar_datos.py con el Python de KiCad
+y después Documentacion\generar_documento.py con Python normal.
+
+
+15. BYPASS DEL FILTRO DE LA ETAPA SIGUIENTE (J7, 16/10)
+--------------------------------------------------------
+Pedido del grupo de filtros: una señal por canal que les avise cuándo saltear su filtro (la cuadrada
+se deforma si pasa por él). Ellos deciden qué hacen con esa señal (relé, opto, etc.).
+   - J7 "J_BYPASS", tira 1x3 en el borde izquierdo, debajo del teclado: 1 BYP_L, 2 GND (DGND), 3 BYP_R.
+   - PB1 -> R16 (470 ohm, parada) -> BYP_L;  PB10 -> R17 (470 ohm, parada) -> BYP_R. Las resistencias
+     protegen el pin si el cable se pone en corto; si no se quieren, van puentes de alambre.
+   - Pistas rectas, alineadas con los pines PB1 / PB2 / PB10 de la Black Pill: no hizo falta ningún
+     puente nuevo. DRC 0, sin conexiones pendientes.
+   - Firmware_PCB: cada pin en alto (3,3 V) mientras ese canal saca la cuadrada; con el resto de las
+     ondas en bajo. Se cambia en el lazo principal de main.c si después quieren otras ondas.
+   - Es solo una señal de control (unos mA como máximo): no alimentar relés ni otras cargas desde J7.
+
+
+
+14. ERROR EN LA HUELLA DE LA BLACK PILL (22/10/2026) -> ACOPLE
+---------------------------------------------------------------
+La huella BlackPill_STM32F411_2x20 no coincide con la WeAct V3.1: la columna izquierda está en orden
+inverso y las dos columnas cambiadas de lado. NO enchufar la Black Pill directo en la placa.
+Solución sin tocar la placa ni el firmware: Acople_BlackPill\ (placa de 33 x 60 mm, una capa, la Black
+Pill va encima girada 180° y corrida 7,62 mm). Ver Acople_BlackPill\LEEME_acople.txt.
+Versión corregida para el futuro (23/10/2026): KiCad_v2\ (huella corregida, Black Pill girada 180°, lado
+derecho re-ruteado, mismo firmware, 4 puentes de alambre). Ver KiCad_v2\LEEME_v2.txt.

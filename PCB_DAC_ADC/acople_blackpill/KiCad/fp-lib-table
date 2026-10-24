@@ -1,0 +1,4 @@
+(fp_lib_table
+  (version 7)
+  (lib (name "Acople_BP")(type "KiCad")(uri "${KIPRJMOD}/Acople_BP.pretty")(options "")(descr "Columnas del acople"))
+)
