@@ -9,9 +9,14 @@
 > - **El teclado entero pasó a la fila izquierda**, en el mismo orden que su tira de 8 pines:
 >   filas PA0, PA1, PA2, PA4 y columnas PA5, PA6, PA7, PB0 (antes filas PA0, PA1, PB0, PB1 y columnas PB8, PB9, PB13, PA4).
 >   Cambia en `Core/Src/keypad.c` y en `MX_GPIO_Init` de `main.c`.
-> - **Bypass del filtro de la etapa siguiente:** PB1 (canal L) y PB10 (canal R) son salidas que salen por J7
->   (J_BYPASS). Cada una queda en alto mientras ese canal saca la onda cuadrada; con cualquier otra onda, en bajo.
->   Se actualiza en el lazo principal de `main.c`, así vale tanto para el teclado como para los comandos por USB.
+> - **Control de la etapa siguiente por J7 (J_BYPASS), cambiado el 04/11.** Los dos pines se actualizan en el lazo
+>   principal de `main.c`, así que valen tanto para el teclado como para los comandos por USB. Siguen a un solo canal,
+>   `CANAL_ETAPA` en `main.c` (canal R, el que usa el otro grupo); el canal L funciona como siempre:
+>   - **PB1 = BYPASS** (J7 pin 1, serigrafía BYP_L): en alto si ese canal está encendido y saca la cuadrada.
+>   - **PB10 = ATEN** (J7 pin 3, serigrafía BYP_R): en alto si ese canal está encendido y en 1 % (−40 dB).
+>     Su volumen en el codec vuelve a 0 dB y los −40 dB los pone la etapa externa, que atenúa señal y ruido.
+>   - **Sin la etapa conectada, pedir 1 % en ese canal saca su salida a 0 dB.** Al entrar conmuta primero la etapa y al salir el codec,
+>     con 20 ms de espera (`T_ATEN_MS`), para que no haya un pico de volumen.
 > - Quedan libres PB8 y PB9.
 > - **24/10: tiene los arreglos del 20/10 de la versión de la perforada** (`stream.c`, `stream.h`, `usbd_cdc_if.c`):
 >   el dato del ADC se realinea solo si llega corrido (antes el `<< 1` era fijo y en algunos armados duplicaba la
@@ -82,7 +87,7 @@ Se quitó el eco de comandos que tenía AGSE, porque ensuciaría el flujo binari
 | Teclado filas 1-4 | **PA0, PA1, PA2, PA4** |
 | Teclado columnas 1-4 | **PA5, PA6, PA7, PB0** |
 | I2C1 | PB6 / PB7 |
-| Bypass del filtro L / R (J7) | **PB1 / PB10** |
+| Bypass del filtro / atenuador externo (J7) | **PB1 / PB10** |
 | USB | PA11 / PA12 |
 
 El codec queda **esclavo** del STM32 para ADC y DAC (en `Envio_codec_UART` el ADC era maestro

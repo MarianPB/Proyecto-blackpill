@@ -61,6 +61,10 @@ typedef enum {
 #define PCM_ADDR     (0x46 << 1)       // direccion I2C del codec (7 bits corridos a 8)
 
 #define I2C_QSIZE    8                 // cola de pedidos I2C que llegan por USB
+
+#define CANAL_ETAPA  RIGHT             // canal que entra a la etapa externa: los pines BYPASS y ATEN siguen a este
+#define AMP_ATEN     1                 // 1 % = -40 dB: con esta amplitud atenua la etapa externa (pin ATEN)
+#define T_ATEN_MS    20                // espera para que la etapa externa termine de conmutar
 /* USER CODE END PD */
 
 /* Private macro -------------------------------------------------------------*/
@@ -111,6 +115,8 @@ static void pcm_update_sys(void);
 void codec_i2c_request(uint8_t op, uint8_t reg, uint8_t val);
 static void codec_i2c_process(void);
 void PCM3060_SetAmplitude(uint8_t canal, uint32_t amplitud);
+static uint8_t bypass_pedido(void);
+static uint8_t aten_pedida(void);
 /* USER CODE END PFP */
 
 /* Private user code ---------------------------------------------------------*/
@@ -191,13 +197,32 @@ int main(void)
    ftw[0] = (uint32_t)(frecuencia[0] * 4294967296.0 / FS);
    ftw[1] = (uint32_t)(frecuencia[1] * 4294967296.0 / FS);
 
+   // etapa atenuadora externa (pin ATEN): en -40 dB atenua ella y el codec vuelve a 0 dB, asi el ruido
+   // de la salida tambien baja. El orden evita un pico de volumen: al entrar conmuta primero la etapa
+   // y despues sube el codec; al salir baja primero el codec y despues se saca la etapa.
+   static uint8_t last_aten = 0;
+   uint8_t aten = aten_pedida();
+   uint8_t cambio_aten = (aten != last_aten);
+   last_aten = aten;
+   if (cambio_aten && aten) {
+       HAL_GPIO_WritePin(ATEN_GPIO_Port, ATEN_Pin, GPIO_PIN_SET);
+       HAL_Delay(T_ATEN_MS);
+   }
+
    // amplitud: se escribe al codec por I2C solo cuando cambia, para no saturar el bus
    static uint32_t last_amp[2] = { 0xFFFFFFFF, 0xFFFFFFFF };
    for (int c = 0; c < 2; c++) {
-       if (amplitud[c] != last_amp[c]) {
+       uint8_t es_etapa = (c == CANAL_ETAPA);
+       if (amplitud[c] != last_amp[c] || (es_etapa && cambio_aten)) {
            last_amp[c] = amplitud[c];
-           PCM3060_SetAmplitude(c, amplitud[c]);   // volumen de ese canal (registro del codec)
+           // volumen de ese canal (registro del codec)
+           PCM3060_SetAmplitude(c, (es_etapa && aten) ? 100 : last_amp[c]);
        }
+   }
+
+   if (cambio_aten && !aten) {
+       HAL_Delay(T_ATEN_MS);
+       HAL_GPIO_WritePin(ATEN_GPIO_Port, ATEN_Pin, GPIO_PIN_RESET);
    }
 
    // estado del codec (diferencial / single-ended, ADC y DAC on/off): se aplica solo cuando cambia
@@ -212,10 +237,8 @@ int main(void)
    // accesos I2C pedidos por la PC (escritura / lectura de registros del codec)
    codec_i2c_process();
 
-   // bypass del filtro de la etapa siguiente: el pin de cada canal queda en alto mientras ese canal
-   // saca la cuadrada (BYP_L = PB1, BYP_R = PB10)
-   HAL_GPIO_WritePin(BYP_L_GPIO_Port, BYP_L_Pin, waveform[LEFT]  == WAVE_SQUARE ? GPIO_PIN_SET : GPIO_PIN_RESET);
-   HAL_GPIO_WritePin(BYP_R_GPIO_Port, BYP_R_Pin, waveform[RIGHT] == WAVE_SQUARE ? GPIO_PIN_SET : GPIO_PIN_RESET);
+   // bypass del filtro de la etapa siguiente (pin BYPASS)
+   HAL_GPIO_WritePin(BYPASS_GPIO_Port, BYPASS_Pin, bypass_pedido() ? GPIO_PIN_SET : GPIO_PIN_RESET);
 
    // teclado: escaneo cada 20 ms
    static uint32_t last_key = 0;
@@ -389,7 +412,7 @@ static void MX_GPIO_Init(void)
   HAL_GPIO_WritePin(GPIOA, GPIO_PIN_0|GPIO_PIN_1|GPIO_PIN_2|GPIO_PIN_4, GPIO_PIN_SET);
 
   /*Configure GPIO pin Output Level */
-  HAL_GPIO_WritePin(GPIOB, BYP_L_Pin|BYP_R_Pin, GPIO_PIN_RESET);
+  HAL_GPIO_WritePin(GPIOB, BYPASS_Pin|ATEN_Pin, GPIO_PIN_RESET);
 
   /*Configure GPIO pins : PA0 PA1 PA2 PA4 */
   GPIO_InitStruct.Pin = GPIO_PIN_0|GPIO_PIN_1|GPIO_PIN_2|GPIO_PIN_4;
@@ -410,8 +433,8 @@ static void MX_GPIO_Init(void)
   GPIO_InitStruct.Pull = GPIO_PULLUP;
   HAL_GPIO_Init(GPIOB, &GPIO_InitStruct);
 
-  /*Configure GPIO pins : BYP_L_Pin BYP_R_Pin */
-  GPIO_InitStruct.Pin = BYP_L_Pin|BYP_R_Pin;
+  /*Configure GPIO pins : BYPASS_Pin ATEN_Pin */
+  GPIO_InitStruct.Pin = BYPASS_Pin|ATEN_Pin;
   GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
   GPIO_InitStruct.Pull = GPIO_NOPULL;
   GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
@@ -538,6 +561,18 @@ void PCM3060_SetAmplitude(uint8_t canal, uint32_t amplitud)
     uint8_t valor = 255 - pasos;           // 0xFF = 0 dB, baja de a 0.5 dB
 
     pcm_write(reg, valor);
+}
+
+// Bypass: alto mientras el canal de la etapa este encendido y saque la cuadrada
+static uint8_t bypass_pedido(void)
+{
+    return salida_activa[CANAL_ETAPA] && waveform[CANAL_ETAPA] == WAVE_SQUARE;
+}
+
+// Atenuador: alto mientras el canal de la etapa este encendido y en -40 dB
+static uint8_t aten_pedida(void)
+{
+    return salida_activa[CANAL_ETAPA] && amplitud[CANAL_ETAPA] == AMP_ATEN;
 }
 /* USER CODE END 4 */
 

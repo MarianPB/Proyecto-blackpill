@@ -380,6 +380,10 @@ se deforma si pasa por él). Ellos deciden qué hacen con esa señal (relé, opt
    - Firmware_PCB: cada pin en alto (3,3 V) mientras ese canal saca la cuadrada; con el resto de las
      ondas en bajo. Se cambia en el lazo principal de main.c si después quieren otras ondas.
    - Es solo una señal de control (unos mA como máximo): no alimentar relés ni otras cargas desde J7.
+   - CAMBIO 04/11, solo de firmware (la placa y la serigrafía siguen iguales): un pin para cada función, los dos
+     siguen al canal que usa la etapa externa (CANAL_ETAPA en main.c, canal R). J7 pin 1 (BYP_L, PB1) = BYPASS, en alto
+     si ese canal está encendido y saca la cuadrada. J7 pin 3 (BYP_R, PB10) = ATEN, en alto si ese canal está
+     encendido y en 1 % (-40 dB): su volumen en el codec vuelve a 0 dB y atenúa la etapa. Ver Firmware_PCB\README.md.
 
 
 
