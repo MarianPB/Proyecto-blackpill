@@ -158,11 +158,11 @@ class Aplicacion:
         # Amplitud interna SIEMPRE en porcentaje
 
         self.amplitud_L = tk.IntVar(
-            value=50
+            value=63
         )
 
         self.amplitud_R = tk.IntVar(
-            value=50
+            value=63
         )
 
         # Unidad seleccionada
@@ -412,7 +412,7 @@ class Aplicacion:
 
         self.label_amp_L = ttk.Label(
             frame_L,
-            text="50 %"
+            text="63 %"
         )
 
         self.label_amp_L.pack()
@@ -427,7 +427,7 @@ class Aplicacion:
             command=self.cambiar_slider_L
         )
 
-        self.slider_L.set(50)
+        self.slider_L.set(63)
 
         self.slider_L.pack(
             fill="x",
@@ -545,7 +545,7 @@ class Aplicacion:
 
         self.label_amp_R = ttk.Label(
             frame_R,
-            text="50 %"
+            text="63 %"
         )
 
         self.label_amp_R.pack()
@@ -560,7 +560,7 @@ class Aplicacion:
             command=self.cambiar_slider_R
         )
 
-        self.slider_R.set(50)
+        self.slider_R.set(63)
 
         self.slider_R.pack(
             fill="x",

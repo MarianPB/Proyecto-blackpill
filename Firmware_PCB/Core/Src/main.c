@@ -174,9 +174,10 @@ int main(void)
 
   // configuracion del codec por I2C
   pcm_write(72, 0x00);   // reg 72: ADC esclavo, I2S 24 bits (el STM32 es el maestro del bus)
+  // el volumen va antes de encender el DAC: asi arranca en la amplitud inicial, sin pasar por 0 dB
+  PCM3060_SetAmplitude(0, amplitud[0]);   // reg 65: volumen DAC L
+  PCM3060_SetAmplitude(1, amplitud[1]);   // reg 66: volumen DAC R
   pcm_update_sys();      // reg 64: ADC y DAC encendidos, modo diferencial
-  pcm_write(65, 0xFF);   // reg 65: volumen DAC L = 0 dB
-  pcm_write(66, 0xFF);   // reg 66: volumen DAC R = 0 dB
   pcm_write(68, 0x40);   // reg 68: sobremuestreo doble (64x a 96 kHz)
 
   oled_init();

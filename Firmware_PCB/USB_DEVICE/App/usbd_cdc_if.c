@@ -39,7 +39,7 @@ typedef enum { LEFT, RIGHT } canal_e;   // indices de canal
 typedef enum { OFF, ON } estado_e;      // estado de salida
 
 float frecuencia[2] = {1000.0f, 1000.0f};
-uint32_t amplitud[2] = {100, 100};
+uint32_t amplitud[2] = {63, 63};              // al encender: nivel de trabajo, no satura al ADC en lazo
 volatile uint8_t salida_activa[2] = {ON, ON};
 
 extern volatile uint8_t modo_diferencial;   // definido en main.c (1=dif, 0=simple)

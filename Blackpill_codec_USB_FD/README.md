@@ -7,6 +7,8 @@ no se tocaron: esta es una copia de `Blackpill_codec_V2` con los cambios de abaj
 ## Qué hace
 
 - **DAC (salida):** igual que AGSE (seno / cuadrada / triangular / chirp, frecuencia, amplitud, ON/OFF).
+  Al encender, los dos canales arrancan al 63 % (2,52 Vpp en salida simple), el nivel de trabajo que no satura al ADC.
+  El máximo sigue disponible con `LAMP:100` y `RAMP:100`.
 - **ADC (entrada):** el I2S2 pasó a **full duplex** (STM32 maestro, 24 bits, 97656.25 Hz).
   El DAC sale por `audio_buf` y el ADC entra por `rx_buf`, los dos por DMA circular.
 - **Hacia la PC:** el audio del ADC se manda binario por el COM virtual (~586 kB/s).
